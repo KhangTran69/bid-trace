@@ -1,6 +1,6 @@
 # BidTrace
 
-BidTrace is a small bid document into structured, traceable PostgreSQL records. It imports one synthetic bid, links each line item to its source, lets a reviewer correct and approve the values, records each change, and exports only fully approved rows.
+BidTrace is a local interview demo that turns a small bid document into structured, traceable PostgreSQL records. It imports one synthetic bid, links each line item to its source, lets a reviewer correct and approve the values, records each change, and exports only fully approved rows.
 
 ## Run the demo
 
@@ -54,13 +54,13 @@ The plan demo creates 100,000 synthetic rows in a temporary table and prints `EX
 docker compose exec app python scripts/explain_query.py
 ```
 
-The backup/restore demo runs `pg_dump`, restores to a uniquely named scratch database, compares the four table counts, and drops only that scratch database:
+The backup/restore demo exports one repeatable-read database snapshot, restores it to a uniquely named scratch database, and compares the four table counts. It then archives only the source files referenced by that restored snapshot, restores them to a temporary directory, and checks that every file exists and matches its recorded SHA-256. Missing or damaged files fail the demo. The scratch database and all temporary files are removed on success or failure; the working database and upload directory are not changed:
 
 ```sh
 docker compose exec app python scripts/backup_restore_demo.py
 ```
 
-This evidence covers PostgreSQL records only; uploaded source files live in a separate Compose volume and are not included in this `pg_dump` demo.
+This demonstrates local database-and-file integrity for BidTrace's content-addressed, immutable source files. It is not a production backup system or point-in-time recovery procedure.
 
 ## Tests and local checks
 
