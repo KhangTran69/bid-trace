@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block title %}BidTrace · Bid review{% endblock %}
+{% block content %}
+  <section class="hero" aria-labelledby="page-title">
+    <p class="eyebrow">DOCUMENT TO TRUSTED DATA</p>
+    <h1 id="page-title">Review a bid, one source-linked item at a time.</h1>
+    <p>Import the synthetic PDF or spreadsheet, verify each extracted value, and approve the rows before export.</p>
+  </section>
+
+  <section class="panel" aria-labelledby="import-title">
+    <h2 id="import-title">Import a bid</h2>
+    <form id="upload-form" class="upload-form" action="/imports" method="post" enctype="multipart/form-data">
+      <label>Project name <input name="project_name" maxlength="160" required autocomplete="off"></label>
+      <label>Vendor name <input name="vendor_name" maxlength="160" required autocomplete="off"></label>
+      <label>Bid file <input name="file" type="file" accept=".pdf,.csv,.xlsx" required></label>
+      <button id="upload-submit" type="submit">Import for review</button>
+      <p class="hint">PDF, CSV, or XLSX · up to 10 MiB · synthetic documents only</p>
+      <p id="upload-status" class="hint" role="status" aria-live="polite" hidden>Uploading and reading the bid…</p>
+    </form>
+  </section>
+
+  <section class="panel" aria-labelledby="bids-title">
+    <div class="section-heading"><h2 id="bids-title">Recent bids</h2><span>{{ bids|length }} total</span></div>
+    {% if bids %}
+      <ul class="bid-list">
+        {% for bid in bids %}
+          <li>
+            <a href="/bids/{{ bid.id }}"><strong>{{ bid.project_name }}</strong><span>{{ bid.vendor_name }}</span></a>
+            <span class="status status-{{ bid.status }}">{{ bid.status|replace('_', ' ') }}</span>
+          </li>
+        {% endfor %}
+      </ul>
+    {% else %}
+      <p class="empty-state">No bids yet. Upload one synthetic sample to begin the review.</p>
+    {% endif %}
+  </section>
+  <script>
+    document.getElementById("upload-form").addEventListener("submit", function () {
+      document.getElementById("upload-submit").disabled = true;
+      document.getElementById("upload-status").hidden = false;
+    });
+  </script>
+{% endblock %}

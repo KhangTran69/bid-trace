@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}BidTrace{% endblock %}</title>
+  <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+  <header class="site-header">
+    <a class="brand" href="/" aria-label="BidTrace home">BidTrace</a>
+    <span class="tagline">Trace every reviewed number to its source.</span>
+  </header>
+  <main class="container">
+    {% if error %}<div class="alert" role="alert">{{ error }}</div>{% endif %}
+    {% block content %}{% endblock %}
+  </main>
+  <footer class="site-footer">Local demo with synthetic bid data. Do not upload real bid documents.</footer>
+</body>
+</html>

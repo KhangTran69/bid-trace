@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% block title %}{{ bid.project_name }} · BidTrace{% endblock %}
+{% block content %}
+  <nav class="breadcrumbs" aria-label="Breadcrumb"><a href="/">All bids</a><span aria-hidden="true">/</span><span>{{ bid.project_name }}</span></nav>
+  <section class="hero bid-hero">
+    <p class="eyebrow">{{ bid.vendor_name }}</p>
+    <h1>{{ bid.project_name }}</h1>
+    <div class="hero-meta">
+      <span class="status status-{{ bid.status }}">{{ bid.status|replace('_', ' ') }}</span>
+      <a href="/documents/{{ bid.document.id }}">Open source file · {{ bid.document.filename }}</a>
+    </div>
+    {% if bid.status == "approved" %}
+      <a class="button export-button" href="/bids/{{ bid.id }}/export.csv">Export approved CSV</a>
+    {% else %}
+      <p class="hint">Approve every line item to unlock the CSV export.</p>
+    {% endif %}
+  </section>
+
+  <section class="review-section" aria-labelledby="items-title">
+    <div class="section-heading"><div><p class="eyebrow">SOURCE-LINKED REVIEW</p><h2 id="items-title">Line items</h2></div><span>{{ items|length }} items</span></div>
+    {% for item in items %}
+      <article class="item-card" aria-labelledby="item-{{ item.id }}-title">
+        <div class="item-heading">
+          <div><h3 id="item-{{ item.id }}-title">Item {{ loop.index }}</h3><span class="source-locator">{{ item.source_locator }}</span></div>
+          <span class="status status-{{ item.status }}">{{ item.status|replace('_', ' ') }}</span>
+        </div>
+        <details class="source-details">
+          <summary>Check extracted source text</summary>
+          <pre>{{ item.source_excerpt }}</pre>
+          <p>Original extraction: {{ item.extracted_description }} · {{ item.extracted_quantity }} {{ item.extracted_unit }} · {{ item.extracted_unit_price }} each</p>
+        </details>
+        <form class="review-form" action="/items/{{ item.id }}/review" method="post">
+          <input type="hidden" name="expected_version" value="{{ item.version }}">
+          <div class="field-grid">
+            <label>Description <input name="description" maxlength="500" value="{{ item.reviewed_description }}" required {% if item.status == "approved" %}disabled{% endif %}></label>
+            <label>Quantity <input name="quantity" type="number" min="0.001" step="0.001" value="{{ item.reviewed_quantity }}" required {% if item.status == "approved" %}disabled{% endif %}></label>
+            <label>Unit <input name="unit" maxlength="32" value="{{ item.reviewed_unit }}" required {% if item.status == "approved" %}disabled{% endif %}></label>
+            <label>Unit price <input name="unit_price" type="number" min="0" step="0.01" value="{{ item.reviewed_unit_price }}" required {% if item.status == "approved" %}disabled{% endif %}></label>
+          </div>
+          {% if item.status != "approved" %}
+            <div class="form-actions">
+              <button class="secondary-button" type="submit" name="action" value="save">Save correction</button>
+              <button type="submit" name="action" value="approve">Approve item</button>
+            </div>
+          {% else %}
+            <p class="approved-note">Approved and included in the audit trail.</p>
+          {% endif %}
+        </form>
+      </article>
+    {% endfor %}
+  </section>
+{% endblock %}

@@ -1,0 +1,34 @@
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: bidtrace
+      POSTGRES_USER: bidtrace
+      POSTGRES_PASSWORD: ${BIDTRACE_POSTGRES_PASSWORD:-bidtrace-local-demo}
+    ports:
+      - "127.0.0.1:55439:5432"
+    volumes:
+      - bidtrace_pgdata:/var/lib/postgresql/data
+      - ./docker/10-create-test-db.sql:/docker-entrypoint-initdb.d/10-create-test-db.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U bidtrace -d bidtrace"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  app:
+    build: .
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql+psycopg://bidtrace:${BIDTRACE_POSTGRES_PASSWORD:-bidtrace-local-demo}@db:5432/bidtrace
+      UPLOAD_DIR: /app/data/uploads
+    ports:
+      - "127.0.0.1:8000:8000"
+    volumes:
+      - bidtrace_uploads:/app/data/uploads
+
+volumes:
+  bidtrace_pgdata:
+  bidtrace_uploads:
