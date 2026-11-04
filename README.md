@@ -1,6 +1,6 @@
 # BidTrace
 
-BidTrace is a local interview demo for turning a small bid document into structured, traceable PostgreSQL records. It imports one synthetic bid, links each line item to its source, lets a reviewer correct and approve the values, records each change, and exports only fully approved rows.
+BidTrace is a small bid document into structured, traceable PostgreSQL records. It imports one synthetic bid, links each line item to its source, lets a reviewer correct and approve the values, records each change, and exports only fully approved rows.
 
 ## Run the demo
 
