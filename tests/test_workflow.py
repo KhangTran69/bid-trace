@@ -2,10 +2,10 @@ import csv
 from concurrent.futures import ThreadPoolExecutor
 from io import StringIO
 from pathlib import Path
-from threading import Barrier
+from threading import Barrier, local
 
 import pytest
-from sqlalchemy import select
+from sqlalchemy import event, select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
@@ -70,6 +70,70 @@ def test_concurrent_same_file_import_creates_one_bid_and_one_file(client, fixtur
         assert len(session.scalars(select(SourceDocument)).all()) == 1
         assert len(session.scalars(select(BidLineItem)).all()) == 2
     assert len(list(upload_dir.iterdir())) == 1
+
+
+def test_concurrent_approvals_mark_bid_approved(client, fixtures_dir, engine):
+    response = upload(
+        client,
+        "bid-demo.csv",
+        (Path(fixtures_dir) / "bid-demo.csv").read_bytes(),
+    )
+    bid_id = int(response.headers["location"].rsplit("/", maxsplit=1)[1])
+    with Session(engine) as session:
+        items = session.scalars(
+            select(BidLineItem).where(BidLineItem.bid_id == bid_id).order_by(BidLineItem.id)
+        ).all()
+        approvals = [
+            (
+                item.id,
+                {
+                    "description": item.reviewed_description,
+                    "quantity": str(item.reviewed_quantity),
+                    "unit": item.reviewed_unit,
+                    "unit_price": str(item.reviewed_unit_price),
+                },
+            )
+            for item in items
+        ]
+
+    app_engine = client.app.state.session_factory.kw["bind"]
+    at_serialization_point = Barrier(2)
+    synchronized = local()
+
+    def synchronize_approvals(_connection, _cursor, statement, _parameters, _context, _many):
+        normalized = statement.lower()
+        bid_lock = "from bids" in normalized and "for update" in normalized
+        finalization_count = "count(" in normalized and "bid_line_items" in normalized
+        if (bid_lock or finalization_count) and not getattr(synchronized, "done", False):
+            synchronized.done = True
+            at_serialization_point.wait(timeout=10)
+
+    def approve(approval):
+        item_id, values = approval
+        with Session(app_engine) as session:
+            return review_line_item(
+                session,
+                item_id=item_id,
+                expected_version=0,
+                values=values,
+                action="approve",
+            ).status
+
+    event.listen(app_engine, "before_cursor_execute", synchronize_approvals)
+    try:
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            statuses = list(executor.map(approve, approvals))
+    finally:
+        event.remove(app_engine, "before_cursor_execute", synchronize_approvals)
+
+    with Session(engine) as session:
+        bid = session.get(Bid, bid_id)
+        item_statuses = session.scalars(
+            select(BidLineItem.status).where(BidLineItem.bid_id == bid_id)
+        ).all()
+    assert statuses == ["approved", "approved"]
+    assert item_statuses == ["approved", "approved"]
+    assert bid.status == "approved"
 
 
 def test_database_failure_rolls_back_import_and_removes_new_file(client, fixtures_dir, engine):
@@ -205,6 +269,17 @@ def test_corrupt_upload_leaves_no_partial_records_or_file(client, engine, tmp_pa
         assert len(session.scalars(select(BidLineItem)).all()) == 0
     upload_dir = client.app.state.settings.upload_dir
     assert not upload_dir.exists() or list(upload_dir.iterdir()) == []
+
+
+def test_import_rejects_decimal_values_that_database_would_round(client, engine):
+    content = b"description,quantity,unit,unit_price\nConcrete,1.2345,CY,145.50\n"
+
+    response = upload(client, "over-precise.csv", content)
+
+    assert response.status_code == 400
+    with Session(engine) as session:
+        assert len(session.scalars(select(Bid)).all()) == 0
+        assert len(session.scalars(select(BidLineItem)).all()) == 0
 
 
 def test_oversized_upload_preserves_existing_bid_list_and_stores_nothing_new(
