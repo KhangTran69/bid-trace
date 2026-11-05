@@ -5,6 +5,12 @@ from typing import Literal
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from app.decimal_limits import (
+    QUANTITY_MAX_EXCLUSIVE,
+    QUANTITY_SCALE,
+    UNIT_PRICE_MAX_EXCLUSIVE,
+    UNIT_PRICE_SCALE,
+)
 from app.models import AuditEvent, Bid, BidLineItem
 from app.services.errors import Conflict, NotFound
 
@@ -41,12 +47,13 @@ def validate_values(values: dict[str, object] | ReviewValues) -> ReviewValues:
         or submitted.unit_price < 0
     ):
         raise ValueError("Quantity must be positive and unit price must be zero or greater.")
-    if submitted.quantity.as_tuple().exponent < -3:
-        raise ValueError("Quantity supports at most three decimal places.")
-    if submitted.unit_price.as_tuple().exponent < -2:
-        raise ValueError("Unit price supports at most two decimal places.")
-    if submitted.quantity >= Decimal("1000000000") or submitted.unit_price >= Decimal(
-        "10000000000"
+    if submitted.quantity.as_tuple().exponent < -QUANTITY_SCALE:
+        raise ValueError(f"Quantity supports at most {QUANTITY_SCALE} decimal places.")
+    if submitted.unit_price.as_tuple().exponent < -UNIT_PRICE_SCALE:
+        raise ValueError(f"Unit price supports at most {UNIT_PRICE_SCALE} decimal places.")
+    if (
+        submitted.quantity >= QUANTITY_MAX_EXCLUSIVE
+        or submitted.unit_price >= UNIT_PRICE_MAX_EXCLUSIVE
     ):
         raise ValueError("Quantity or unit price is too large for this bid demo.")
     return submitted
@@ -76,6 +83,16 @@ def review_line_item(
         raise ValueError("Action must be save or approve.")
     submitted = validate_values(values)
     with session.begin():
+        locked_bid = None
+        if action == "approve":
+            bid_id = session.scalar(
+                select(BidLineItem.bid_id).where(BidLineItem.id == item_id)
+            )
+            if bid_id is None:
+                raise NotFound("Line item was not found.")
+            locked_bid = session.scalar(select(Bid).where(Bid.id == bid_id).with_for_update())
+            if locked_bid is None:
+                raise NotFound("Bid was not found.")
         item = session.scalar(
             select(BidLineItem).where(BidLineItem.id == item_id).with_for_update()
         )
@@ -113,6 +130,5 @@ def review_line_item(
                 .where(BidLineItem.bid_id == item.bid_id, BidLineItem.status != "approved")
             )
             if remaining == 0:
-                bid = session.scalar(select(Bid).where(Bid.id == item.bid_id).with_for_update())
-                bid.status = "approved"
+                locked_bid.status = "approved"
     return item

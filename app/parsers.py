@@ -9,6 +9,12 @@ from openpyxl import load_workbook
 from pypdf import PdfReader
 
 from app.config import MAX_UPLOAD_BYTES
+from app.decimal_limits import (
+    QUANTITY_MAX_EXCLUSIVE,
+    QUANTITY_SCALE,
+    UNIT_PRICE_MAX_EXCLUSIVE,
+    UNIT_PRICE_SCALE,
+)
 
 
 class ParseError(ValueError):
@@ -62,11 +68,21 @@ def _make_item(
         raise ParseError("Each line item needs a unit of 1 to 32 characters.")
     if len(excerpt) > 1000:
         raise ParseError("A source row is too long for the supported demo format.")
+    quantity_value = _required_decimal(quantity, "Quantity")
+    unit_price_value = _required_decimal(unit_price, "Unit price", allow_zero=True)
+    if quantity_value.as_tuple().exponent < -QUANTITY_SCALE:
+        raise ParseError(f"Quantity supports at most {QUANTITY_SCALE} decimal places.")
+    if unit_price_value.as_tuple().exponent < -UNIT_PRICE_SCALE:
+        raise ParseError(f"Unit price supports at most {UNIT_PRICE_SCALE} decimal places.")
+    if quantity_value >= QUANTITY_MAX_EXCLUSIVE:
+        raise ParseError("Quantity is too large for this bid demo.")
+    if unit_price_value >= UNIT_PRICE_MAX_EXCLUSIVE:
+        raise ParseError("Unit price is too large for this bid demo.")
     return ParsedLineItem(
         description=description_text,
-        quantity=_required_decimal(quantity, "Quantity"),
+        quantity=quantity_value,
         unit=unit_text,
-        unit_price=_required_decimal(unit_price, "Unit price", allow_zero=True),
+        unit_price=unit_price_value,
         source_locator=locator,
         source_excerpt=excerpt,
     )
@@ -137,7 +153,7 @@ def _dict_rows(rows: list[list[object]], locator) -> list[ParsedLineItem]:
         if len(values) < 4:
             raise ParseError(f"Row {row_number} must contain all four bid columns.")
         excerpt = " | ".join("" if value is None else str(value) for value in values)
-        items.append(_make_item(*values, locator(row_number), excerpt[:1000]))
+        items.append(_make_item(*values, locator(row_number), excerpt))
     return items
 
 

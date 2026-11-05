@@ -43,3 +43,33 @@ def test_invalid_documents_fail_clearly(filename, content):
 def test_upload_limit_is_enforced():
     with pytest.raises(ParseError, match="10 MiB"):
         parse_document("large.csv", b"x" * (10 * 1024 * 1024 + 1))
+
+
+@pytest.mark.parametrize(
+    ("quantity", "unit_price"),
+    [
+        ("1.2345", "2.00"),
+        ("12", "2.345"),
+        ("1000000000", "2.00"),
+        ("12", "10000000000"),
+    ],
+)
+def test_csv_rejects_values_the_database_cannot_preserve_exactly(quantity, unit_price):
+    content = (
+        "description,quantity,unit,unit_price\n"
+        f"Concrete,{quantity},CY,{unit_price}\n"
+    ).encode()
+
+    with pytest.raises(ParseError):
+        parse_document("bid.csv", content)
+
+
+def test_csv_rejects_source_rows_longer_than_the_stored_excerpt():
+    quantity = "0" * 1001 + "1"
+    content = (
+        "description,quantity,unit,unit_price\n"
+        f"Concrete,{quantity},CY,2.00\n"
+    ).encode()
+
+    with pytest.raises(ParseError, match="source row is too long"):
+        parse_document("bid.csv", content)
