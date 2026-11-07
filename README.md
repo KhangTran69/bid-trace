@@ -62,6 +62,8 @@ docker compose exec app python scripts/backup_restore_demo.py
 
 This demonstrates local database-and-file integrity for BidTrace's content-addressed, immutable source files. It is not a production backup system or point-in-time recovery procedure.
 
+See the [backup/restore reviewer evidence guide](docs/backup-restore-evidence.md) for the isolated synthetic run command, expected outcomes, cleanup evidence, and current CI status.
+
 ## Tests and local checks
 
 The tests target a disposable PostgreSQL database named `bidtrace_test`; they truncate only its application tables. Start Compose first, then run:

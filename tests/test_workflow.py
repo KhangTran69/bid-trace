@@ -271,15 +271,34 @@ def test_corrupt_upload_leaves_no_partial_records_or_file(client, engine, tmp_pa
     assert not upload_dir.exists() or list(upload_dir.iterdir()) == []
 
 
-def test_import_rejects_decimal_values_that_database_would_round(client, engine):
-    content = b"description,quantity,unit,unit_price\nConcrete,1.2345,CY,145.50\n"
+@pytest.mark.parametrize(
+    ("filename", "quantity", "unit_price", "error_message"),
+    [
+        ("quantity-scale.csv", "1.2345", "145.50", "Quantity supports at most 3"),
+        ("price-scale.csv", "1", "145.501", "Unit price supports at most 2"),
+        ("quantity-range.csv", "1000000000", "145.50", "Quantity is too large"),
+        ("price-range.csv", "1", "10000000000", "Unit price is too large"),
+    ],
+)
+def test_invalid_numeric_imports_leave_no_partial_state(
+    client, engine, filename, quantity, unit_price, error_message
+):
+    content = (
+        "description,quantity,unit,unit_price\n"
+        f"Concrete,{quantity},CY,{unit_price}\n"
+    ).encode()
 
-    response = upload(client, "over-precise.csv", content)
+    response = upload(client, filename, content)
 
     assert response.status_code == 400
+    assert error_message in response.text
     with Session(engine) as session:
         assert len(session.scalars(select(Bid)).all()) == 0
+        assert len(session.scalars(select(SourceDocument)).all()) == 0
         assert len(session.scalars(select(BidLineItem)).all()) == 0
+        assert len(session.scalars(select(AuditEvent)).all()) == 0
+    upload_dir = client.app.state.settings.upload_dir
+    assert not upload_dir.exists() or list(upload_dir.iterdir()) == []
 
 
 def test_oversized_upload_preserves_existing_bid_list_and_stores_nothing_new(

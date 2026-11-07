@@ -1,9 +1,10 @@
 from contextlib import asynccontextmanager
+from hashlib import sha256
 from pathlib import Path
 from typing import Annotated
 
 from fastapi import Depends, FastAPI, File, Form, HTTPException, Request, UploadFile
-from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, Response
+from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import select
@@ -194,17 +195,26 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         upload_root = resolved_settings.upload_dir.resolve()
         source_path = (upload_root / document.storage_key).resolve()
         if upload_root not in source_path.parents or not source_path.is_file():
-            raise HTTPException(status_code=404, detail="Source file is not available.")
+            return Response(status_code=404)
+        try:
+            with source_path.open("rb") as source_file:
+                content = source_file.read(resolved_settings.max_upload_bytes + 1)
+        except OSError:
+            return Response(status_code=404)
+        if (
+            len(content) > resolved_settings.max_upload_bytes
+            or sha256(content).hexdigest() != document.sha256
+        ):
+            return Response(status_code=404)
         media_type = (
             "application/pdf" if source_path.suffix == ".pdf" else "application/octet-stream"
         )
-        if source_path.suffix == ".pdf":
-            return FileResponse(
-                source_path,
-                media_type=media_type,
-                headers={"Content-Disposition": f'inline; filename="{document.filename}"'},
-            )
-        return FileResponse(source_path, filename=document.filename, media_type=media_type)
+        disposition = "inline" if source_path.suffix == ".pdf" else "attachment"
+        return Response(
+            content=content,
+            media_type=media_type,
+            headers={"Content-Disposition": f'{disposition}; filename="{document.filename}"'},
+        )
 
     return app
 
