@@ -40,6 +40,8 @@ Import writes the source file and creates the bid, source document, items, and i
 
 The app has one local demo reviewer and no authentication. Compose binds the app and PostgreSQL ports to loopback. This is not a production security boundary or a backup policy.
 
+The browser review form rejects requests marked cross-site by Fetch Metadata and requests whose `Origin` header is present but invalid, different, or outside the documented loopback origins (`http://127.0.0.1:8000` and `http://localhost:8000`). Non-browser clients that omit both headers remain usable. This check limits cross-site browser submissions; it does not add authentication or make the demo suitable for deployment on an untrusted network.
+
 ## Database checks
 
 Compose starts PostgreSQL 16, waits for its health check, applies Alembic migrations, then starts the app. To inspect the applied revision:

@@ -2,6 +2,7 @@ from contextlib import asynccontextmanager
 from hashlib import sha256
 from pathlib import Path
 from typing import Annotated
+from urllib.parse import urlsplit
 
 from fastapi import Depends, FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
@@ -19,6 +20,52 @@ from app.services.imports import import_bid
 from app.services.reviews import review_line_item
 
 TEMPLATES = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
+LOCAL_REVIEW_ORIGINS = frozenset(
+    {
+        ("http", "localhost", 8000),
+        ("http", "127.0.0.1", 8000),
+    }
+)
+
+
+def _origin_tuple(value: str) -> tuple[str, str, int] | None:
+    try:
+        parsed = urlsplit(value)
+        if (
+            parsed.scheme not in {"http", "https"}
+            or parsed.hostname is None
+            or parsed.username is not None
+            or parsed.password is not None
+            or parsed.path not in {"", "/"}
+            or parsed.query
+            or parsed.fragment
+        ):
+            return None
+        port = parsed.port
+        if port is None:
+            port = 443 if parsed.scheme == "https" else 80
+    except ValueError:
+        return None
+    return parsed.scheme, parsed.hostname.lower(), port
+
+
+def _reject_cross_site_review(request: Request) -> None:
+    if request.headers.get("sec-fetch-site", "").lower() == "cross-site":
+        raise HTTPException(status_code=403, detail="Cross-site review requests are not allowed.")
+
+    origin = request.headers.get("origin")
+    if origin is None:
+        return
+
+    request_host = request.headers.get("host", "")
+    expected_origin = _origin_tuple(f"http://{request_host}")
+    submitted_origin = _origin_tuple(origin)
+    if (
+        expected_origin not in LOCAL_REVIEW_ORIGINS
+        or submitted_origin not in LOCAL_REVIEW_ORIGINS
+        or submitted_origin != expected_origin
+    ):
+        raise HTTPException(status_code=403, detail="Cross-origin review requests are not allowed.")
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -136,6 +183,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         unit_price: Annotated[str, Form()],
         session: Annotated[Session, Depends(session_dependency)],
     ):
+        _reject_cross_site_review(request)
         try:
             item = review_line_item(
                 session,
