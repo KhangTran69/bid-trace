@@ -42,3 +42,101 @@ jobs:
         env:
           TEST_DATABASE_URL: postgresql+psycopg://bidtrace:bidtrace-ci@127.0.0.1:5432/bidtrace_test
         run: pytest
+
+  restore-demo:
+    runs-on: ubuntu-24.04
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: bidtrace
+          POSTGRES_PASSWORD: bidtrace-ci
+          POSTGRES_DB: bidtrace_restore_source
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U bidtrace -d bidtrace_restore_source"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install PostgreSQL 16 client tools
+        run: sudo apt-get update && sudo apt-get install --yes postgresql-client-16
+      - name: Install project and development tools
+        run: python -m pip install --upgrade pip && pip install -e '.[dev]'
+      - name: Verify isolated backup and restore cases
+        env:
+          DATABASE_URL: postgresql+psycopg://bidtrace:bidtrace-ci@127.0.0.1:5432/bidtrace_restore_source
+          PGHOST: 127.0.0.1
+          PGPORT: "5432"
+          PGUSER: bidtrace
+          PGPASSWORD: bidtrace-ci
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          run_root="$(mktemp -d)"
+          cleanup() {
+            status=$?
+            while IFS= read -r scratch_db; do
+              [[ -n "$scratch_db" ]] || continue
+              psql -d postgres -v ON_ERROR_STOP=1 -c \
+                "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = '$scratch_db' AND pid <> pg_backend_pid();" >/dev/null || true
+              psql -d postgres -v ON_ERROR_STOP=1 -c \
+                "DROP DATABASE IF EXISTS \"$scratch_db\";" >/dev/null || true
+            done < <(psql -d postgres -Atqc "SELECT datname FROM pg_database WHERE datname ~ '^bidtrace_restore_[0-9a-f]{12}$'" || true)
+            psql -d postgres -v ON_ERROR_STOP=1 -c \
+              "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = 'bidtrace_restore_source' AND pid <> pg_backend_pid();" >/dev/null || true
+            psql -d postgres -v ON_ERROR_STOP=1 -c 'DROP DATABASE IF EXISTS bidtrace_restore_source;' >/dev/null || true
+            rm -rf "$run_root"
+            exit "$status"
+          }
+          trap cleanup EXIT
+          mkdir -p "$run_root/source-uploads" "$run_root/tmp"
+          export UPLOAD_DIR="$run_root/source-uploads"
+          export TMPDIR="$run_root/tmp"
+
+          alembic upgrade head
+          python scripts/seed_restore_demo.py
+
+          assert_cleanup() {
+            local scratch_count backup_temp_count
+            scratch_count="$(psql -d postgres -Atqc "SELECT count(*) FROM pg_database WHERE datname ~ '^bidtrace_restore_[0-9a-f]{12}$'")"
+            if [[ "$scratch_count" != "0" ]]; then
+              echo "Restore demo left $scratch_count scratch database(s)." >&2
+              exit 1
+            fi
+            shopt -s nullglob
+            local backup_temps=("$TMPDIR"/bidtrace-backup-*)
+            backup_temp_count=${#backup_temps[@]}
+            if [[ "$backup_temp_count" != "0" ]]; then
+              echo "Restore demo left $backup_temp_count temporary archive directory(ies)." >&2
+              exit 1
+            fi
+          }
+
+          python scripts/backup_restore_demo.py
+          assert_cleanup
+
+          source_file="$(find "$UPLOAD_DIR" -type f -print -quit)"
+          test -n "$source_file"
+          fixture_key="$(basename "$source_file")"
+          cp "$source_file" "$run_root/fixture.txt"
+          rm "$source_file"
+          if python scripts/backup_restore_demo.py; then
+            echo "Restore demo unexpectedly accepted a missing source file." >&2
+            exit 1
+          fi
+          assert_cleanup
+
+          source_file="$UPLOAD_DIR/$fixture_key"
+          cp "$run_root/fixture.txt" "$source_file"
+          printf 'corrupted synthetic fixture\n' > "$source_file"
+          if python scripts/backup_restore_demo.py; then
+            echo "Restore demo unexpectedly accepted a corrupted source file." >&2
+            exit 1
+          fi
+          assert_cleanup
