@@ -80,6 +80,18 @@ uv run ruff check .
 
 CI runs the migration, schema-drift check, Ruff, and the same PostgreSQL-backed tests on Python 3.12.
 
+## Change-area map
+
+| Change area | Owning code | Focused evidence |
+|-------------|-------------|------------------|
+| Parse and import a source document; preserve source locations and avoid partial records | [`app/parsers.py`](app/parsers.py), [`app/services/imports.py`](app/services/imports.py), import route in [`app/main.py`](app/main.py#L103) | [`tests/test_parsers.py`](tests/test_parsers.py), [idempotency](tests/test_workflow.py#L28), and [rollback cleanup](tests/test_workflow.py#L139) |
+| Correct or approve a line, retain audit history, reject stale edits, and gate CSV export | [`app/services/reviews.py`](app/services/reviews.py), [`app/services/exports.py`](app/services/exports.py), [review](app/main.py#L174) and [export](app/main.py#L218) routes | Review and audit workflow cases in [`tests/test_workflow.py`](tests/test_workflow.py#L331); approval-only export at [`test_only_fully_approved_bid_can_be_exported`](tests/test_workflow.py#L428) |
+| Serve a stored source document only when its content hash matches | Document route in [`app/main.py`](app/main.py#L235) | Exact-byte, mismatch, missing-file, and path-containment cases in [`tests/test_source_document_download.py`](tests/test_source_document_download.py#L48) |
+| Change persisted tables, types, or audit immutability | [`app/models.py`](app/models.py), [`app/migrations/versions/`](app/migrations/versions/) | [`tests/test_schema.py`](tests/test_schema.py); CI also runs Alembic's schema-drift check |
+| Change the isolated database-and-file restore demonstration | [`scripts/backup_restore_demo.py`](scripts/backup_restore_demo.py), [`app/services/source_backup.py`](app/services/source_backup.py) | [`tests/test_backup_restore_demo.py`](tests/test_backup_restore_demo.py), then follow the [restore evidence guide](docs/backup-restore-evidence.md) for the real local run and current CI status |
+
+The PostgreSQL-backed workflow tests need the disposable test database described above. The restore guide distinguishes mocked failure-cleanup coverage from a real PostgreSQL restore run and marks the hosted restore run pending.
+
 ## Demo limits
 
 This repository intentionally demonstrates a narrow and auditable ingestion path. It does not implement OCR, generalized construction takeoff, tenant accounts, authentication, real ERP/CRM integrations, cloud hosting, replication, or production recovery guarantees. PDF extraction supports only the documented text fixture layout.
