@@ -1,8 +1,10 @@
 import csv
 import re
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation
 from io import BytesIO, StringIO
+from itertools import islice
 from pathlib import Path
 
 from openpyxl import load_workbook
@@ -38,6 +40,7 @@ class ParsedDocument:
 
 
 EXPECTED_HEADERS = ("description", "quantity", "unit", "unit_price")
+MAX_IMPORT_ROWS = 10_000
 PDF_ROW = re.compile(r"^ITEM\|([^|]+)\|([^|]+)\|([^|]+)\|([^|]+)$")
 
 
@@ -110,7 +113,7 @@ def _parse_pdf(content: bytes) -> ParsedDocument:
         items: list[ParsedLineItem] = []
         for page_number, page in enumerate(reader.pages, start=1):
             text = page.extract_text() or ""
-            for line in text.splitlines():
+            for line in StringIO(text):
                 candidate = line.strip()
                 if not candidate.startswith("ITEM|"):
                     continue
@@ -119,6 +122,8 @@ def _parse_pdf(content: bytes) -> ParsedDocument:
                     raise ParseError(
                         "PDF line items must use ITEM|description|quantity|unit|unit_price."
                     )
+                if len(items) >= MAX_IMPORT_ROWS:
+                    raise ParseError("PDF files can contain at most 10,000 item lines.")
                 description, quantity, unit, unit_price = match.groups()
                 items.append(
                     _make_item(
@@ -137,17 +142,29 @@ def _parse_pdf(content: bytes) -> ParsedDocument:
     return _document_with_items("text-pdf-v1", items)
 
 
-def _dict_rows(rows: list[list[object]], locator) -> list[ParsedLineItem]:
-    if not rows:
+def _dict_rows(
+    rows: Iterable[Iterable[object]], locator: Callable[[int], str]
+) -> list[ParsedLineItem]:
+    row_iterator = iter(rows)
+    header_row = next(row_iterator, None)
+    if header_row is None:
         raise ParseError("The spreadsheet has no header row.")
-    headers = [str(value).strip().lower() if value is not None else "" for value in rows[0]]
-    if tuple(headers[:4]) != EXPECTED_HEADERS or any(
-        value not in (None, "") for value in rows[0][4:]
-    ):
+    header_values = iter(header_row)
+    headers = [
+        str(value).strip().lower() if value is not None else ""
+        for value in islice(header_values, 4)
+    ]
+    extra_headers = any(value is not None and str(value).strip() for value in header_values)
+    if tuple(headers) != EXPECTED_HEADERS or extra_headers:
         raise ParseError("Expected columns: description, quantity, unit, unit_price.")
-    items = []
-    for row_number, row in enumerate(rows[1:], start=2):
-        values = row[:4]
+    items: list[ParsedLineItem] = []
+    for row_number, row in enumerate(row_iterator, start=2):
+        if row_number > MAX_IMPORT_ROWS + 1:
+            raise ParseError("CSV and XLSX files can contain at most 10,000 data rows.")
+        row_values = iter(row)
+        values = list(islice(row_values, 4))
+        if any(value is not None and str(value).strip() for value in row_values):
+            raise ParseError(f"Row {row_number} contains data beyond the fourth column.")
         if all(value is None or str(value).strip() == "" for value in values):
             continue
         if len(values) < 4:
@@ -160,10 +177,10 @@ def _dict_rows(rows: list[list[object]], locator) -> list[ParsedLineItem]:
 def _parse_csv(content: bytes) -> ParsedDocument:
     try:
         text = content.decode("utf-8-sig")
-        rows = list(csv.reader(StringIO(text, newline="")))
+        rows = csv.reader(StringIO(text, newline=""))
+        items = _dict_rows(rows, lambda row: f"row:{row}")
     except (UnicodeDecodeError, csv.Error) as exc:
         raise ParseError("CSV files must be valid UTF-8 with comma-separated columns.") from exc
-    items = _dict_rows(rows, lambda row: f"row:{row}")
     return _document_with_items("csv-v1", items)
 
 
@@ -171,9 +188,8 @@ def _parse_xlsx(content: bytes) -> ParsedDocument:
     try:
         workbook = load_workbook(BytesIO(content), read_only=True, data_only=True)
         sheet = workbook[workbook.sheetnames[0]]
-        rows = [list(row) for row in sheet.iter_rows(values_only=True)]
         items = _dict_rows(
-            rows,
+            sheet.iter_rows(values_only=True),
             lambda row: f"sheet:{sheet.title}!A{row}:D{row}",
         )
     except ParseError:

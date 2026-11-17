@@ -24,8 +24,10 @@ To remove the Compose database and uploaded files, use `docker compose down -v`.
 ## Supported input layouts
 
 - **PDF:** text-based documents with one item per line in the form `ITEM|description|quantity|unit|unit_price`. OCR and arbitrary bid layouts are outside this demo.
-- **CSV/XLSX:** first row has exactly `description,quantity,unit,unit_price`; data starts on row 2. XLSX reads the first worksheet.
-- **Limits:** PDF, CSV, and XLSX up to 10 MiB. Use synthetic data only; do not upload real bids, customer records, personal data, or credentials.
+- **CSV/XLSX:** first row has exactly `description,quantity,unit,unit_price`; data starts on row 2. XLSX reads the first worksheet. Nonempty cells after the fourth column are rejected.
+- **Limits:** PDF, CSV, and XLSX up to 10 MiB; CSV/XLSX support at most 10,000 data rows and PDF supports at most 10,000 item lines. Use synthetic data only; do not upload real bids, customer records, personal data, or credentials.
+
+The per-file limit is checked after multipart form parsing and spooling. Keep this local demo on the loopback-only deployment shown below; it is not designed for untrusted upload traffic.
 
 Each source reference shows the PDF page, CSV row, or XLSX sheet and cell range plus the exact extracted row text. Extraction is a draft: a human must review each line.
 
@@ -36,7 +38,7 @@ Each source reference shows the PDF page, CSV row, or XLSX sheet and cell range 
 - `bid_line_items` keeps original extracted values beside reviewed values, with exact source location, status, and optimistic-lock version.
 - `audit_events` records the reviewer, timestamp, action, and before/after JSONB values. Review updates and their audit rows commit together. A PostgreSQL trigger rejects audit-row updates and deletes.
 
-Import writes the source file and creates the bid, source document, items, and import audit record transactionally. A failed DB write removes a newly staged source file. Re-uploading identical bytes returns the existing bid. Review forms submit a row version; stale forms receive a conflict rather than overwriting a newer edit. The final item approval and bid status update commit together. CSV export checks approval in PostgreSQL and prefixes formula-leading text to prevent spreadsheet formula execution.
+Import writes the source file and creates the bid, source document, items, and import audit record transactionally. PostgreSQL serializes imports by content hash, and failed-import cleanup rechecks the database under that lock before removing a newly staged file. Re-uploading identical bytes returns the existing bid. If an unsupported SQLite import fails, its staged file is retained because this code path has no cross-process SQLite lock. Review forms submit a row version; stale forms receive a conflict rather than overwriting a newer edit. The final item approval and bid status update commit together. CSV export checks approval in PostgreSQL and prefixes formula-leading text to prevent spreadsheet formula execution.
 
 The app has one local demo reviewer and no authentication. Compose binds the app and PostgreSQL ports to loopback. This is not a production security boundary or a backup policy.
 

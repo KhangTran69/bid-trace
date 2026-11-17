@@ -4,7 +4,7 @@ from hashlib import sha256
 from pathlib import Path
 from tempfile import NamedTemporaryFile
 
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
 from app.models import AuditEvent, Bid, BidLineItem, SourceDocument
@@ -38,6 +38,22 @@ def _existing_bid(session: Session, digest: str) -> Bid | None:
     return session.get(Bid, document.bid_id) if document else None
 
 
+def _lock_import_hash(session: Session, digest: str) -> None:
+    dialect = session.get_bind().dialect.name
+    if dialect == "postgresql":
+        lock_key = int.from_bytes(
+            sha256(b"bidtrace-import:" + bytes.fromhex(digest)).digest()[:8],
+            byteorder="big",
+            signed=True,
+        )
+        session.execute(
+            text("SELECT pg_advisory_xact_lock(CAST(:lock_key AS BIGINT))"),
+            {"lock_key": lock_key},
+        )
+    elif dialect != "sqlite":
+        raise RuntimeError("Concurrent BidTrace imports require PostgreSQL or SQLite.")
+
+
 def import_bid(
     session: Session,
     *,
@@ -53,73 +69,75 @@ def import_bid(
         raise ValueError("Vendor name must contain 1 to 160 characters.")
     parsed = parse_document(filename, content)
     digest = sha256(content).hexdigest()
-
-    existing = _existing_bid(session, digest)
     session.commit()
-    if existing:
-        return existing
-
     extension = Path(filename).suffix.lower()
     storage_key = f"{digest}{extension}"
-    created_file = _store_content(storage_dir, storage_key, content)
+    dialect = session.get_bind().dialect.name
+    created_file = False
     try:
         with session.begin():
-            bid = Bid(project_name=project_name.strip(), vendor_name=vendor_name.strip())
-            session.add(bid)
-            session.flush()
-            document = SourceDocument(
-                bid_id=bid.id,
-                filename=_safe_filename(filename),
-                sha256=digest,
-                parser_name=parsed.parser_name,
-                storage_key=storage_key,
-            )
-            session.add(document)
-            session.flush()
-            items = []
-            for row in parsed.items:
-                items.append(
-                    BidLineItem(
+            _lock_import_hash(session, digest)
+            bid = _existing_bid(session, digest)
+            if bid is None:
+                created_file = _store_content(storage_dir, storage_key, content)
+                bid = Bid(project_name=project_name.strip(), vendor_name=vendor_name.strip())
+                session.add(bid)
+                session.flush()
+                document = SourceDocument(
+                    bid_id=bid.id,
+                    filename=_safe_filename(filename),
+                    sha256=digest,
+                    parser_name=parsed.parser_name,
+                    storage_key=storage_key,
+                )
+                session.add(document)
+                session.flush()
+                items = []
+                for row in parsed.items:
+                    items.append(
+                        BidLineItem(
+                            bid_id=bid.id,
+                            document_id=document.id,
+                            source_locator=row.source_locator,
+                            source_excerpt=row.source_excerpt,
+                            extracted_description=row.description,
+                            extracted_quantity=row.quantity,
+                            extracted_unit=row.unit,
+                            extracted_unit_price=row.unit_price,
+                            reviewed_description=row.description,
+                            reviewed_quantity=row.quantity,
+                            reviewed_unit=row.unit,
+                            reviewed_unit_price=row.unit_price,
+                            status="needs_review",
+                            version=0,
+                        )
+                    )
+                session.add_all(items)
+                session.flush()
+                session.add(
+                    AuditEvent(
                         bid_id=bid.id,
-                        document_id=document.id,
-                        source_locator=row.source_locator,
-                        source_excerpt=row.source_excerpt,
-                        extracted_description=row.description,
-                        extracted_quantity=row.quantity,
-                        extracted_unit=row.unit,
-                        extracted_unit_price=row.unit_price,
-                        reviewed_description=row.description,
-                        reviewed_quantity=row.quantity,
-                        reviewed_unit=row.unit,
-                        reviewed_unit_price=row.unit_price,
-                        status="needs_review",
-                        version=0,
+                        entity_type="bid",
+                        entity_id=bid.id,
+                        actor="demo-reviewer",
+                        action="bid_imported",
+                        before_values=None,
+                        after_values={"sha256": digest, "item_count": len(items)},
                     )
                 )
-            session.add_all(items)
-            session.flush()
-            session.add(
-                AuditEvent(
-                    bid_id=bid.id,
-                    entity_type="bid",
-                    entity_id=bid.id,
-                    actor="demo-reviewer",
-                    action="bid_imported",
-                    before_values=None,
-                    after_values={"sha256": digest, "item_count": len(items)},
-                )
-            )
         return bid
     except Exception:
         session.rollback()
         try:
-            winning_bid = _existing_bid(session, digest)
-            session.commit()
+            with session.begin():
+                _lock_import_hash(session, digest)
+                winning_bid = _existing_bid(session, digest)
+                # SQLite has no cross-process lock in this path, so retain staged files.
+                if winning_bid is None and created_file and dialect == "postgresql":
+                    (storage_dir / storage_key).unlink(missing_ok=True)
+            if winning_bid is not None:
+                return winning_bid
         except Exception:
             session.rollback()
-            winning_bid = None
-        if winning_bid is not None:
-            return winning_bid
-        if created_file:
-            (storage_dir / storage_key).unlink(missing_ok=True)
+            # Keep a staged file if cleanup could not safely verify its owner.
         raise
