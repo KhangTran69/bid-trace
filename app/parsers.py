@@ -41,6 +41,7 @@ class ParsedDocument:
 
 EXPECTED_HEADERS = ("description", "quantity", "unit", "unit_price")
 MAX_IMPORT_ROWS = 10_000
+MAX_CSV_COLUMNS = 64
 PDF_ROW = re.compile(r"^ITEM\|([^|]+)\|([^|]+)\|([^|]+)\|([^|]+)$")
 
 
@@ -177,11 +178,47 @@ def _dict_rows(
 def _parse_csv(content: bytes) -> ParsedDocument:
     try:
         text = content.decode("utf-8-sig")
+        _validate_csv_column_limit(text)
         rows = csv.reader(StringIO(text, newline=""))
         items = _dict_rows(rows, lambda row: f"row:{row}")
     except (UnicodeDecodeError, csv.Error) as exc:
         raise ParseError("CSV files must be valid UTF-8 with comma-separated columns.") from exc
     return _document_with_items("csv-v1", items)
+
+
+def _validate_csv_column_limit(text: str) -> None:
+    """Reject wide logical records before csv.reader allocates their field lists."""
+    columns = 1
+    at_field_start = True
+    in_quotes = False
+    index = 0
+    while index < len(text):
+        character = text[index]
+        if in_quotes:
+            if character == '"':
+                if index + 1 < len(text) and text[index + 1] == '"':
+                    index += 2
+                    continue
+                in_quotes = False
+            index += 1
+            continue
+
+        if character == '"' and at_field_start:
+            in_quotes = True
+            at_field_start = False
+        elif character == ",":
+            columns += 1
+            if columns > MAX_CSV_COLUMNS:
+                raise ParseError("CSV rows can contain at most 64 columns.")
+            at_field_start = True
+        elif character in "\r\n":
+            columns = 1
+            at_field_start = True
+            if character == "\r" and index + 1 < len(text) and text[index + 1] == "\n":
+                index += 1
+        else:
+            at_field_start = False
+        index += 1
 
 
 def _parse_xlsx(content: bytes) -> ParsedDocument:

@@ -24,7 +24,7 @@ To remove the Compose database and uploaded files, use `docker compose down -v`.
 ## Supported input layouts
 
 - **PDF:** text-based documents with one item per line in the form `ITEM|description|quantity|unit|unit_price`. OCR and arbitrary bid layouts are outside this demo.
-- **CSV/XLSX:** first row has exactly `description,quantity,unit,unit_price`; data starts on row 2. XLSX reads the first worksheet. Nonempty cells after the fourth column are rejected.
+- **CSV/XLSX:** first row has exactly `description,quantity,unit,unit_price`; data starts on row 2. XLSX reads the first worksheet. CSV rows support up to 64 columns, including quoted commas and newlines; nonempty cells after the fourth column are rejected.
 - **Limits:** PDF, CSV, and XLSX up to 10 MiB; CSV/XLSX support at most 10,000 data rows and PDF supports at most 10,000 item lines. Use synthetic data only; do not upload real bids, customer records, personal data, or credentials.
 
 The per-file limit is checked after multipart form parsing and spooling. Keep this local demo on the loopback-only deployment shown below; it is not designed for untrusted upload traffic.
