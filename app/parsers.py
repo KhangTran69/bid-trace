@@ -8,6 +8,7 @@ from itertools import islice
 from pathlib import Path
 
 from openpyxl import load_workbook
+from openpyxl.xml.constants import MAX_ROW
 from pypdf import PdfReader
 
 from app.config import MAX_UPLOAD_BYTES
@@ -144,7 +145,10 @@ def _parse_pdf(content: bytes) -> ParsedDocument:
 
 
 def _dict_rows(
-    rows: Iterable[Iterable[object]], locator: Callable[[int], str]
+    rows: Iterable[Iterable[object]],
+    locator: Callable[[int], str],
+    *,
+    max_empty_row: int = MAX_IMPORT_ROWS + 1,
 ) -> list[ParsedLineItem]:
     row_iterator = iter(rows)
     header_row = next(row_iterator, None)
@@ -161,6 +165,10 @@ def _dict_rows(
     items: list[ParsedLineItem] = []
     for row_number, row in enumerate(row_iterator, start=2):
         if row_number > MAX_IMPORT_ROWS + 1:
+            if row_number <= max_empty_row and all(
+                value is None or not str(value).strip() for value in row
+            ):
+                continue
             raise ParseError("CSV and XLSX files can contain at most 10,000 data rows.")
         row_values = iter(row)
         values = list(islice(row_values, 4))
@@ -225,9 +233,12 @@ def _parse_xlsx(content: bytes) -> ParsedDocument:
     try:
         workbook = load_workbook(BytesIO(content), read_only=True, data_only=True)
         sheet = workbook[workbook.sheetnames[0]]
+        # Stale worksheet dimensions can hide cells from the read-only iterator.
+        sheet.reset_dimensions()
         items = _dict_rows(
             sheet.iter_rows(values_only=True),
             lambda row: f"sheet:{sheet.title}!A{row}:D{row}",
+            max_empty_row=MAX_ROW,
         )
     except ParseError:
         raise
