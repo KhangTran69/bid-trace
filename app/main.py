@@ -10,7 +10,7 @@ from starlette.middleware.sessions import SessionMiddleware
 
 from app.config import Settings
 from app.db import make_engine, make_session_factory
-from app.routes import auth, bids, documents, exports, imports, reviews
+from app.routes import auth, bids, dashboard, documents, exports, imports, reviews
 from app.security import apply_security_headers, origin_tuple
 
 logger = logging.getLogger("bidtrace")
@@ -58,6 +58,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     app.include_router(auth.router)
     app.include_router(bids.router)
+    app.include_router(dashboard.router)
     app.include_router(imports.router)
     app.include_router(reviews.router)
     app.include_router(exports.router)

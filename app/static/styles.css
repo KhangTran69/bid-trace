@@ -80,3 +80,9 @@ button:hover, .button:hover { background: var(--accent-dark); }
 .user-name { color: #31443a; font-weight: 650; font-size: 14px; }
 .link-button { min-height: 34px; padding: 5px 12px; background: white; color: var(--accent-dark); border: 1px solid var(--line); font-size: 14px; }
 .link-button:hover { background: var(--accent-dark); color: white; }
+.stat-list { list-style: none; margin: 0 0 14px; padding: 0; display: grid; gap: 10px; max-width: 560px; }
+.stat-list li { display: flex; align-items: center; justify-content: space-between; padding: 9px 13px; border: 1px solid var(--line); border-radius: 10px; background: #fff; }
+.audit-table { width: 100%; border-collapse: collapse; font-size: 14px; margin-top: 6px; }
+.audit-table th, .audit-table td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); }
+.audit-table th { color: var(--muted); font-size: 12px; letter-spacing: .06em; text-transform: uppercase; }
+.nav-link { font-weight: 650; color: var(--accent-dark); text-decoration: none; }

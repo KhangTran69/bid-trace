@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+{% block title %}BidTrace · Dashboard{% endblock %}
+{% block content %}
+  <section class="hero" aria-labelledby="dash-title">
+    <p class="eyebrow">REVIEW PROGRESS</p>
+    <h1 id="dash-title">Where every bid stands</h1>
+    <p>Aggregated review state across all imported bids and their line items.</p>
+  </section>
+
+  <section class="panel" aria-labelledby="bids-status-title">
+    <h2 id="bids-status-title">Bids by status</h2>
+    <ul class="stat-list">
+      <li><span class="status status-needs_review">Needs review</span><strong>{{ stats.bids_by_status.get('needs_review', 0) }}</strong></li>
+      <li><span class="status status-approved">Approved</span><strong>{{ stats.bids_by_status.get('approved', 0) }}</strong></li>
+    </ul>
+  </section>
+
+  <section class="panel" aria-labelledby="items-status-title">
+    <h2 id="items-status-title">Line items by status</h2>
+    <ul class="stat-list">
+      <li><span class="status status-needs_review">Needs review</span><strong>{{ stats.items_by_status.get('needs_review', 0) }}</strong></li>
+      <li><span class="status status-corrected">Corrected</span><strong>{{ stats.items_by_status.get('corrected', 0) }}</strong></li>
+      <li><span class="status status-approved">Approved</span><strong>{{ stats.items_by_status.get('approved', 0) }}</strong></li>
+    </ul>
+  </section>
+
+  <section class="panel" aria-labelledby="totals-title">
+    <h2 id="totals-title">Extracted vs reviewed totals</h2>
+    <ul class="stat-list">
+      <li><span>Extracted amount</span><strong>{{ "%.2f"|format(stats.total_extracted_amount) }}</strong></li>
+      <li><span>Reviewed amount</span><strong>{{ "%.2f"|format(stats.total_reviewed_amount) }}</strong></li>
+      <li><span>Variance (reviewed − extracted)</span><strong>{{ "%.2f"|format(stats.total_reviewed_amount - stats.total_extracted_amount) }}</strong></li>
+    </ul>
+    <p class="hint">Amounts are quantity × unit price summed across every line item.</p>
+  </section>
+
+  <section class="panel" aria-labelledby="audit-title">
+    <h2 id="audit-title">Audit trail activity</h2>
+    <ul class="stat-list">
+      {% for action, count in stats.audit_counts.items() %}
+        <li><code>{{ action }}</code><strong>{{ count }}</strong></li>
+      {% else %}
+        <li><span class="hint">No audit events recorded yet.</span></li>
+      {% endfor %}
+    </ul>
+    {% if stats.recent_events %}
+      <table class="audit-table" aria-label="Recent audit events">
+        <thead><tr><th>When</th><th>Action</th><th>Actor</th><th>Entity</th><th>Bid</th></tr></thead>
+        <tbody>
+          {% for event in stats.recent_events %}
+            <tr>
+              <td>{{ event.created_at.strftime('%Y-%m-%d %H:%M UTC') }}</td>
+              <td><code>{{ event.action }}</code></td>
+              <td>{{ event.actor }}</td>
+              <td>{{ event.entity_type }} #{{ event.entity_id }}</td>
+              <td><a href="/bids/{{ event.bid_id }}">bid #{{ event.bid_id }}</a></td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    {% endif %}
+  </section>
+{% endblock %}
