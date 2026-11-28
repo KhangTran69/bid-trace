@@ -17,6 +17,10 @@ class DashboardStats:
     total_extracted_amount: Decimal = Decimal("0")
     total_reviewed_amount: Decimal = Decimal("0")
     recent_events: list[AuditEvent] = field(default_factory=list)
+    total_bids: int = 0
+    approved_bids: int = 0
+    total_items: int = 0
+    approved_items: int = 0
 
 
 def _as_decimal(value: object) -> Decimal:
@@ -60,4 +64,8 @@ def collect_dashboard_stats(session: Session, *, recent_limit: int = 10) -> Dash
         total_extracted_amount=_as_decimal(extracted_total),
         total_reviewed_amount=_as_decimal(reviewed_total),
         recent_events=recent_events,
+        total_bids=sum(bids_by_status.values()),
+        approved_bids=bids_by_status.get("approved", 0),
+        total_items=sum(items_by_status.values()),
+        approved_items=items_by_status.get("approved", 0),
     )

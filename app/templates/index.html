@@ -1,10 +1,12 @@
 {% extends "base.html" %}
 {% block title %}BidTrace · Bid review{% endblock %}
 {% block content %}
-  <section class="hero" aria-labelledby="page-title">
-    <p class="eyebrow">DOCUMENT TO TRUSTED DATA</p>
-    <h1 id="page-title">Review a bid, one source-linked item at a time.</h1>
-    <p>Import the synthetic PDF or spreadsheet, verify each extracted value, and approve the rows before export.</p>
+  <section class="page-head" aria-labelledby="page-title">
+    <div>
+      <p class="eyebrow">DOCUMENT TO TRUSTED DATA</p>
+      <h1 id="page-title">Review a bid, one source-linked item at a time.</h1>
+      <p class="hint">Import the synthetic PDF or spreadsheet, verify each extracted value, and approve the rows before export.</p>
+    </div>
   </section>
 
   <section class="panel" aria-labelledby="import-title">
@@ -20,7 +22,13 @@
   </section>
 
   <section class="panel" aria-labelledby="bids-title">
-    <div class="section-heading"><h2 id="bids-title">Recent bids</h2><span>{{ bids|length }} shown</span></div>
+    <div class="section-heading">
+      <h2 id="bids-title">Recent bids</h2>
+      <div class="page-head-actions">
+        <a class="nav-link" href="/exports/all.csv">Export summary CSV</a>
+        <span class="head-count">{{ bids|length }} shown</span>
+      </div>
+    </div>
     <form class="filter-form" action="/" method="get" aria-label="Filter bids">
       <label>Search <input name="q" value="{{ q }}" maxlength="160" placeholder="Project or vendor"></label>
       <label>Status
@@ -31,7 +39,6 @@
         </select>
       </label>
       <button type="submit">Filter</button>
-      <a class="nav-link export-link" href="/exports/all.csv">Export summary CSV</a>
     </form>
     {% if bids %}
       <ul class="bid-list">

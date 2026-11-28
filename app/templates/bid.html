@@ -2,22 +2,34 @@
 {% block title %}{{ bid.project_name }} · BidTrace{% endblock %}
 {% block content %}
   <nav class="breadcrumbs" aria-label="Breadcrumb"><a href="/">All bids</a><span aria-hidden="true">/</span><span>{{ bid.project_name }}</span></nav>
-  <section class="hero bid-hero">
-    <p class="eyebrow">{{ bid.vendor_name }}</p>
-    <h1>{{ bid.project_name }}</h1>
-    <div class="hero-meta">
-      <span class="status status-{{ bid.status }}">{{ bid.status|replace('_', ' ') }}</span>
-      <a href="/documents/{{ bid.document.id }}">Open source file · {{ bid.document.filename }}</a>
+  <section class="page-head" aria-labelledby="bid-title">
+    <div>
+      <p class="eyebrow">{{ bid.vendor_name }}</p>
+      <h1 id="bid-title">{{ bid.project_name }}</h1>
+      <div class="page-head-actions">
+        <span class="status status-{{ bid.status }}">{{ bid.status|replace('_', ' ') }}</span>
+        <a href="/documents/{{ bid.document.id }}">Open source file · {{ bid.document.filename }}</a>
+        {% if bid.status == "approved" %}
+          <a class="button export-button" href="/bids/{{ bid.id }}/export.csv">Export approved CSV</a>
+        {% else %}
+          <span class="hint">Approve every line item to unlock the CSV export.</span>
+        {% endif %}
+      </div>
     </div>
-    {% if bid.status == "approved" %}
-      <a class="button export-button" href="/bids/{{ bid.id }}/export.csv">Export approved CSV</a>
-    {% else %}
-      <p class="hint">Approve every line item to unlock the CSV export.</p>
+    {% if items %}
+      {% set approved_count = items | selectattr("status", "equalto", "approved") | list | length %}
+      <div class="meter-row">
+        <span class="meter-label"><span>Review progress</span><span>{{ approved_count }}/{{ items|length }} approved</span></span>
+        <div class="meter" role="img" aria-label="{{ approved_count }} of {{ items|length }} items approved">
+          <div class="meter-fill" style="width: {{ (100 * approved_count // items|length) if items else 0 }}%"></div>
+        </div>
+      </div>
     {% endif %}
   </section>
 
   <section class="review-section" aria-labelledby="items-title">
-    <div class="section-heading"><div><p class="eyebrow">SOURCE-LINKED REVIEW</p><h2 id="items-title">Line items</h2></div><span>{{ items|length }} items</span></div>
+    <div class="section-heading"><div><p class="eyebrow">SOURCE-LINKED REVIEW</p><h2 id="items-title">Line items</h2></div><span class="head-count">{{ items|length }} items</span></div>
+    <p class="edited-legend">Amber fields differ from the extracted values; check the source text before approving.</p>
     {% for item in items %}
       <article class="item-card" aria-labelledby="item-{{ item.id }}-title">
         <div class="item-heading">
@@ -27,16 +39,16 @@
         <details class="source-details">
           <summary>Check extracted source text</summary>
           <pre>{{ item.source_excerpt }}</pre>
-          <p>Original extraction: {{ item.extracted_description }} · {{ item.extracted_quantity }} {{ item.extracted_unit }} · {{ item.extracted_unit_price }} each</p>
         </details>
         <form class="review-form" action="/items/{{ item.id }}/review" method="post">
           <input type="hidden" name="expected_version" value="{{ item.version }}">
           <div class="field-grid">
-            <label>Description <input name="description" maxlength="500" value="{{ item.reviewed_description }}" required {% if item.status == "approved" %}disabled{% endif %}></label>
-            <label>Quantity <input name="quantity" type="number" min="0.001" step="0.001" value="{{ item.reviewed_quantity }}" required {% if item.status == "approved" %}disabled{% endif %}></label>
-            <label>Unit <input name="unit" maxlength="32" value="{{ item.reviewed_unit }}" required {% if item.status == "approved" %}disabled{% endif %}></label>
-            <label>Unit price <input name="unit_price" type="number" min="0" step="0.01" value="{{ item.reviewed_unit_price }}" required {% if item.status == "approved" %}disabled{% endif %}></label>
+            <label>Description <input name="description" maxlength="500" value="{{ item.reviewed_description }}" required {% if item.status == "approved" %}disabled{% endif %} {% if item.reviewed_description != item.extracted_description %}class="is-edited"{% endif %}></label>
+            <label>Quantity <input name="quantity" type="number" min="0.001" step="0.001" value="{{ item.reviewed_quantity }}" required {% if item.status == "approved" %}disabled{% endif %} {% if item.reviewed_quantity != item.extracted_quantity %}class="is-edited"{% endif %}></label>
+            <label>Unit <input name="unit" maxlength="32" value="{{ item.reviewed_unit }}" required {% if item.status == "approved" %}disabled{% endif %} {% if item.reviewed_unit != item.extracted_unit %}class="is-edited"{% endif %}></label>
+            <label>Unit price <input name="unit_price" type="number" min="0" step="0.01" value="{{ item.reviewed_unit_price }}" required {% if item.status == "approved" %}disabled{% endif %} {% if item.reviewed_unit_price != item.extracted_unit_price %}class="is-edited"{% endif %}></label>
           </div>
+          <p class="extracted-note">Extracted: {{ item.extracted_description }} · {{ item.extracted_quantity }} {{ item.extracted_unit }} · {{ item.extracted_unit_price }} each</p>
           {% if item.status != "approved" %}
             <div class="form-actions">
               <button class="secondary-button" type="submit" name="action" value="save">Save correction</button>

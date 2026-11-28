@@ -1,10 +1,12 @@
 {% extends "base.html" %}
 {% block title %}BidTrace · Dashboard{% endblock %}
 {% block content %}
-  <section class="hero" aria-labelledby="dash-title">
-    <p class="eyebrow">REVIEW PROGRESS</p>
-    <h1 id="dash-title">Where every bid stands</h1>
-    <p>Aggregated review state across all imported bids and their line items.</p>
+  <section class="page-head" aria-labelledby="dash-title">
+    <div>
+      <p class="eyebrow">REVIEW PROGRESS</p>
+      <h1 id="dash-title">Where every bid stands</h1>
+      <p class="hint">Aggregated review state across all imported bids and their line items.</p>
+    </div>
   </section>
 
   <section class="panel" aria-labelledby="bids-status-title">
@@ -13,6 +15,12 @@
       <li><span class="status status-needs_review">Needs review</span><strong>{{ stats.bids_by_status.get('needs_review', 0) }}</strong></li>
       <li><span class="status status-approved">Approved</span><strong>{{ stats.bids_by_status.get('approved', 0) }}</strong></li>
     </ul>
+    <div class="meter-row">
+      <span class="meter-label"><span>Fully approved bids</span><span>{{ stats.approved_bids }}/{{ stats.total_bids }}</span></span>
+      <div class="meter" role="img" aria-label="{{ stats.approved_bids }} of {{ stats.total_bids }} bids fully approved">
+        <div class="meter-fill" style="width: {{ (100 * stats.approved_bids // stats.total_bids) if stats.total_bids else 0 }}%"></div>
+      </div>
+    </div>
   </section>
 
   <section class="panel" aria-labelledby="items-status-title">
@@ -22,16 +30,23 @@
       <li><span class="status status-corrected">Corrected</span><strong>{{ stats.items_by_status.get('corrected', 0) }}</strong></li>
       <li><span class="status status-approved">Approved</span><strong>{{ stats.items_by_status.get('approved', 0) }}</strong></li>
     </ul>
+    <div class="meter-row">
+      <span class="meter-label"><span>Approved items</span><span>{{ stats.approved_items }}/{{ stats.total_items }}</span></span>
+      <div class="meter" role="img" aria-label="{{ stats.approved_items }} of {{ stats.total_items }} items approved">
+        <div class="meter-fill" style="width: {{ (100 * stats.approved_items // stats.total_items) if stats.total_items else 0 }}%"></div>
+      </div>
+    </div>
   </section>
 
   <section class="panel" aria-labelledby="totals-title">
     <h2 id="totals-title">Extracted vs reviewed totals</h2>
+    {% set variance = stats.total_reviewed_amount - stats.total_extracted_amount %}
     <ul class="stat-list">
       <li><span>Extracted amount</span><strong>{{ "%.2f"|format(stats.total_extracted_amount) }}</strong></li>
       <li><span>Reviewed amount</span><strong>{{ "%.2f"|format(stats.total_reviewed_amount) }}</strong></li>
-      <li><span>Variance (reviewed − extracted)</span><strong>{{ "%.2f"|format(stats.total_reviewed_amount - stats.total_extracted_amount) }}</strong></li>
+      <li><span>Variance (reviewed − extracted)</span><strong class="{{ 'variance-over' if variance > 0 else ('variance-under' if variance < 0 else '') }}">{{ "%+.2f"|format(variance) }}</strong></li>
     </ul>
-    <p class="hint">Amounts are quantity × unit price summed across every line item.</p>
+    <p class="hint">Amounts are quantity × unit price summed across every line item. Green means reviewers lowered the total; red means they raised it.</p>
   </section>
 
   <section class="panel" aria-labelledby="audit-title">

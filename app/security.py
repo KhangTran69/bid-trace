@@ -12,7 +12,7 @@ SECURITY_HEADERS = {
     "X-Frame-Options": "DENY",
     "Referrer-Policy": "no-referrer",
     "Content-Security-Policy": (
-        "default-src 'self'; script-src 'self'; style-src 'self'; "
+        "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; "
         "img-src 'self' data:; form-action 'self'; base-uri 'self'; frame-ancestors 'none'"
     ),
 }
