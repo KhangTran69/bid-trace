@@ -86,3 +86,6 @@ button:hover, .button:hover { background: var(--accent-dark); }
 .audit-table th, .audit-table td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); }
 .audit-table th { color: var(--muted); font-size: 12px; letter-spacing: .06em; text-transform: uppercase; }
 .nav-link { font-weight: 650; color: var(--accent-dark); text-decoration: none; }
+.filter-form { display: grid; grid-template-columns: 2fr 1fr auto; gap: 12px; align-items: end; margin-bottom: 16px; }
+.filter-form select { width: 100%; min-height: 42px; padding: 9px 11px; border: 1px solid #aebdb3; border-radius: 9px; background: #fff; color: var(--ink); font: inherit; }
+.export-link { align-self: center; white-space: nowrap; }

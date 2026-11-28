@@ -20,7 +20,19 @@
   </section>
 
   <section class="panel" aria-labelledby="bids-title">
-    <div class="section-heading"><h2 id="bids-title">Recent bids</h2><span>{{ bids|length }} total</span></div>
+    <div class="section-heading"><h2 id="bids-title">Recent bids</h2><span>{{ bids|length }} shown</span></div>
+    <form class="filter-form" action="/" method="get" aria-label="Filter bids">
+      <label>Search <input name="q" value="{{ q }}" maxlength="160" placeholder="Project or vendor"></label>
+      <label>Status
+        <select name="status">
+          <option value="">All statuses</option>
+          <option value="needs_review" {% if status == 'needs_review' %}selected{% endif %}>Needs review</option>
+          <option value="approved" {% if status == 'approved' %}selected{% endif %}>Approved</option>
+        </select>
+      </label>
+      <button type="submit">Filter</button>
+      <a class="nav-link export-link" href="/exports/all.csv">Export summary CSV</a>
+    </form>
     {% if bids %}
       <ul class="bid-list">
         {% for bid in bids %}
@@ -30,6 +42,8 @@
           </li>
         {% endfor %}
       </ul>
+    {% elif q or status %}
+      <p class="empty-state">No bids match the current filters.</p>
     {% else %}
       <p class="empty-state">No bids yet. Upload one synthetic sample to begin the review.</p>
     {% endif %}

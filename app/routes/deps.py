@@ -17,6 +17,17 @@ def session_dependency(request: Request) -> Session:
 SessionDep = Annotated[Session, Depends(session_dependency)]
 
 
-def list_bids_desc(session: Session) -> list[Bid]:
-    """All bids, newest first — the single ordering used by list views."""
-    return list(session.scalars(select(Bid).order_by(Bid.created_at.desc(), Bid.id.desc())).all())
+KNOWN_BID_STATUSES = ("needs_review", "approved")
+
+
+def list_bids_desc(
+    session: Session, *, q: str | None = None, status: str | None = None
+) -> list[Bid]:
+    """Bids newest first, optionally filtered by search text and status."""
+    query = select(Bid).order_by(Bid.created_at.desc(), Bid.id.desc())
+    if status in KNOWN_BID_STATUSES:
+        query = query.where(Bid.status == status)
+    if q:
+        needle = f"%{q.strip()}%"
+        query = query.where(Bid.project_name.ilike(needle) | Bid.vendor_name.ilike(needle))
+    return list(session.scalars(query).all())

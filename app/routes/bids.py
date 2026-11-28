@@ -1,6 +1,8 @@
 """Home page and bid-detail views."""
 
-from fastapi import APIRouter, HTTPException, Request
+from typing import Annotated
+
+from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
@@ -43,11 +45,22 @@ def render_bid(
 
 
 @router.get("/", response_class=HTMLResponse)
-def home(request: Request, session: SessionDep, user: UserDep):
+def home(
+    request: Request,
+    session: SessionDep,
+    user: UserDep,
+    q: Annotated[str, Query(max_length=160)] = "",
+    status: Annotated[str, Query(max_length=32)] = "",
+):
     return TEMPLATES.TemplateResponse(
         request=request,
         name="index.html",
-        context={"bids": list_bids_desc(session), "user": user},
+        context={
+            "bids": list_bids_desc(session, q=q.strip() or None, status=status or None),
+            "user": user,
+            "q": q.strip(),
+            "status": status,
+        },
     )
 
 
