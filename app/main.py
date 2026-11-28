@@ -1,8 +1,8 @@
+import logging
 from contextlib import asynccontextmanager
 from hashlib import sha256
 from pathlib import Path
 from typing import Annotated
-from urllib.parse import urlsplit
 
 from fastapi import Depends, FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
@@ -11,67 +11,29 @@ from fastapi.templating import Jinja2Templates
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
-from app.config import Settings
+from app.config import MAX_UPLOAD_BYTES, Settings
 from app.db import make_engine, make_session_factory
 from app.models import Bid, BidLineItem, SourceDocument
+from app.security import apply_security_headers, enforce_same_origin, origin_tuple
 from app.services.errors import Conflict, NotFound
 from app.services.exports import export_bid_csv
 from app.services.imports import import_bid
 from app.services.reviews import review_line_item
 
+logger = logging.getLogger("bidtrace")
+
 TEMPLATES = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
-LOCAL_REVIEW_ORIGINS = frozenset(
-    {
-        ("http", "localhost", 8000),
-        ("http", "127.0.0.1", 8000),
-    }
-)
-
-
-def _origin_tuple(value: str) -> tuple[str, str, int] | None:
-    try:
-        parsed = urlsplit(value)
-        if (
-            parsed.scheme not in {"http", "https"}
-            or parsed.hostname is None
-            or parsed.username is not None
-            or parsed.password is not None
-            or parsed.path not in {"", "/"}
-            or parsed.query
-            or parsed.fragment
-        ):
-            return None
-        port = parsed.port
-        if port is None:
-            port = 443 if parsed.scheme == "https" else 80
-    except ValueError:
-        return None
-    return parsed.scheme, parsed.hostname.lower(), port
-
-
-def _reject_cross_site_review(request: Request) -> None:
-    if request.headers.get("sec-fetch-site", "").lower() == "cross-site":
-        raise HTTPException(status_code=403, detail="Cross-site review requests are not allowed.")
-
-    origin = request.headers.get("origin")
-    if origin is None:
-        return
-
-    request_host = request.headers.get("host", "")
-    expected_origin = _origin_tuple(f"http://{request_host}")
-    submitted_origin = _origin_tuple(origin)
-    if (
-        expected_origin not in LOCAL_REVIEW_ORIGINS
-        or submitted_origin not in LOCAL_REVIEW_ORIGINS
-        or submitted_origin != expected_origin
-    ):
-        raise HTTPException(status_code=403, detail="Cross-origin review requests are not allowed.")
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
     resolved_settings = settings or Settings()
     engine = make_engine(resolved_settings.database_url)
     session_factory = make_session_factory(engine)
+
+    if not logging.getLogger().handlers:
+        # The Docker image runs uvicorn with its own logger config; add a root
+        # handler only when none exists so app logs always reach stderr.
+        logging.basicConfig(level=logging.INFO)
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
@@ -81,13 +43,24 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app = FastAPI(title="BidTrace", version="0.1.0", lifespan=lifespan)
     app.state.settings = resolved_settings
     app.state.session_factory = session_factory
+    app.state.allowed_review_origins = frozenset(
+        parsed
+        for origin in resolved_settings.allowed_review_origins
+        if (parsed := origin_tuple(origin)) is not None
+    )
     app.mount(
         "/static",
         StaticFiles(directory=str(Path(__file__).parent / "static")),
         name="static",
     )
 
-    def session_dependency(request: Request):
+    @app.middleware("http")
+    async def add_security_headers(request: Request, call_next):
+        response = await call_next(request)
+        apply_security_headers(response)
+        return response
+
+    def session_dependency(request: Request) -> Session:
         with request.app.state.session_factory() as session:
             yield session
 
@@ -97,10 +70,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return TEMPLATES.TemplateResponse(
             request=request,
             name="index.html",
-            context={"bids": bids, "error": request.query_params.get("error")},
+            context={"bids": bids},
         )
 
-    @app.post("/imports")
+    @app.post("/imports", dependencies=[Depends(enforce_same_origin)])
     def create_import(
         request: Request,
         project_name: Annotated[str, Form()],
@@ -108,8 +81,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         file: Annotated[UploadFile, File()],
         session: Annotated[Session, Depends(session_dependency)],
     ):
-        content = file.file.read(resolved_settings.max_upload_bytes + 1)
-        if len(content) > resolved_settings.max_upload_bytes:
+        content = file.file.read(MAX_UPLOAD_BYTES + 1)
+        if len(content) > MAX_UPLOAD_BYTES:
             bids = session.scalars(select(Bid).order_by(Bid.created_at.desc(), Bid.id.desc())).all()
             return TEMPLATES.TemplateResponse(
                 request=request,
@@ -171,7 +144,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     ):
         return render_bid(request, session, bid_id)
 
-    @app.post("/items/{item_id}/review")
+    @app.post("/items/{item_id}/review", dependencies=[Depends(enforce_same_origin)])
     def save_review(
         request: Request,
         item_id: int,
@@ -183,7 +156,6 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         unit_price: Annotated[str, Form()],
         session: Annotated[Session, Depends(session_dependency)],
     ):
-        _reject_cross_site_review(request)
         try:
             item = review_line_item(
                 session,
@@ -243,16 +215,24 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         upload_root = resolved_settings.upload_dir.resolve()
         source_path = (upload_root / document.storage_key).resolve()
         if upload_root not in source_path.parents or not source_path.is_file():
+            logger.warning(
+                "Source document %s (%s) is missing or outside the upload root.",
+                document_id,
+                document.storage_key,
+            )
             return Response(status_code=404)
         try:
             with source_path.open("rb") as source_file:
-                content = source_file.read(resolved_settings.max_upload_bytes + 1)
+                content = source_file.read(MAX_UPLOAD_BYTES + 1)
         except OSError:
+            logger.warning("Source document %s could not be read.", document_id)
             return Response(status_code=404)
-        if (
-            len(content) > resolved_settings.max_upload_bytes
-            or sha256(content).hexdigest() != document.sha256
-        ):
+        if len(content) > MAX_UPLOAD_BYTES or sha256(content).hexdigest() != document.sha256:
+            logger.warning(
+                "Source document %s failed integrity verification (size %d).",
+                document_id,
+                len(content),
+            )
             return Response(status_code=404)
         media_type = (
             "application/pdf" if source_path.suffix == ".pdf" else "application/octet-stream"

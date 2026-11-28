@@ -1,3 +1,4 @@
+import logging
 from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation
 from typing import Literal
@@ -13,6 +14,8 @@ from app.decimal_limits import (
 )
 from app.models import AuditEvent, Bid, BidLineItem
 from app.services.errors import Conflict, NotFound
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -131,4 +134,7 @@ def review_line_item(
             )
             if remaining == 0:
                 locked_bid.status = "approved"
+    logger.info(
+        "Recorded action %s for line item %d by %s.", action, item_id, actor
+    )
     return item

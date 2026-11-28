@@ -34,10 +34,5 @@
       <p class="empty-state">No bids yet. Upload one synthetic sample to begin the review.</p>
     {% endif %}
   </section>
-  <script>
-    document.getElementById("upload-form").addEventListener("submit", function () {
-      document.getElementById("upload-submit").disabled = true;
-      document.getElementById("upload-status").hidden = false;
-    });
-  </script>
+  <script src="/static/upload.js" defer></script>
 {% endblock %}
