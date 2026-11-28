@@ -9,9 +9,10 @@ Requirements: Docker Desktop with Compose, and a browser.
 ```sh
 cp .env.example .env
 docker compose up --build
+docker compose exec app python scripts/create_user.py reviewer
 ```
 
-Open <http://127.0.0.1:8000>. Try `fixtures/bid-demo.pdf`, `fixtures/bid-demo.csv`, or `fixtures/bid-demo.xlsx`. Enter a project and vendor, inspect the source excerpt for each item, save any correction, and approve each row. The CSV export becomes available after every row is approved.
+Open <http://127.0.0.1:8000> and sign in with the reviewer account you created. Try `fixtures/bid-demo.pdf`, `fixtures/bid-demo.csv`, or `fixtures/bid-demo.xlsx`. Enter a project and vendor, inspect the source excerpt for each item, save any correction, and approve each row. The CSV export becomes available after every row is approved. The bid list supports search (`?q=`) and status (`?status=needs_review|approved`) filtering, the header links to a `/dashboard` progress view, and `/exports/all.csv` downloads a one-row-per-bid summary. Set `AUTH_ENABLED=0` in `.env` to restore anonymous demo access.
 
 To stop the app and keep its local demo data:
 
@@ -40,9 +41,9 @@ Each source reference shows the PDF page, CSV row, or XLSX sheet and cell range 
 
 Import writes the source file and creates the bid, source document, items, and import audit record transactionally. PostgreSQL serializes imports by content hash, and failed-import cleanup rechecks the database under that lock before removing a newly staged file. Re-uploading identical bytes returns the existing bid. If an unsupported SQLite import fails, its staged file is retained because this code path has no cross-process SQLite lock. Review forms submit a row version; stale forms receive a conflict rather than overwriting a newer edit. The final item approval and bid status update commit together. CSV export checks approval in PostgreSQL and prefixes formula-leading text to prevent spreadsheet formula execution.
 
-The app has one local demo reviewer and no authentication. Compose binds the app and PostgreSQL ports to loopback. This is not a production security boundary or a backup policy.
+Sign-in is required by default: reviewer accounts are created with `scripts/create_user.py` (bcrypt-hashed passwords), sign-in state lives in a signed session cookie, and the signed-in username is recorded as the `audit_events` actor. With `AUTH_ENABLED=0` the app returns to the original single hardcoded `demo-reviewer`. Set a unique `SESSION_SECRET` for any deployment shared beyond one machine. Compose binds the app and PostgreSQL ports to loopback. This is not a production security boundary or a backup policy.
 
-The browser review form rejects requests marked cross-site by Fetch Metadata and requests whose `Origin` header is present but invalid, different, or outside the documented loopback origins (`http://127.0.0.1:8000` and `http://localhost:8000`). Non-browser clients that omit both headers remain usable. This check limits cross-site browser submissions; it does not add authentication or make the demo suitable for deployment on an untrusted network.
+State-changing browser submissions (sign-ins, bid imports, and line-item reviews) reject requests marked cross-site by Fetch Metadata and requests whose `Origin` header is present but invalid, different, or outside the allowed origins. Allowed origins default to the loopback URLs of ports 8000 and 8001 and can be overridden with a comma-separated `REVIEW_ORIGINS` environment variable. Non-browser clients that omit both headers remain usable. Responses also carry `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`, and a `Content-Security-Policy` that blocks inline scripts while allowing the inline styles used by the progress meters. This check limits cross-site browser submissions; it does not make the demo suitable for deployment on an untrusted network.
 
 ## Database checks
 
@@ -80,20 +81,21 @@ DATABASE_URL='postgresql+psycopg://bidtrace:bidtrace-local-demo@127.0.0.1:55439/
 uv run ruff check .
 ```
 
-CI runs the migration, schema-drift check, Ruff, and the same PostgreSQL-backed tests on Python 3.12.
+CI installs the locked dependencies with uv, runs the migration, schema-drift check, Ruff, and the same PostgreSQL-backed tests with a coverage summary on Python 3.12 and 3.13.
 
 ## Change-area map
 
 | Change area | Owning code | Focused evidence |
 |-------------|-------------|------------------|
-| Parse and import a source document; preserve source locations and avoid partial records | [`app/parsers.py`](app/parsers.py), [`app/services/imports.py`](app/services/imports.py), import route in [`app/main.py`](app/main.py#L103) | [`tests/test_parsers.py`](tests/test_parsers.py), [idempotency](tests/test_workflow.py#L28), and [rollback cleanup](tests/test_workflow.py#L139) |
-| Correct or approve a line, retain audit history, reject stale edits, and gate CSV export | [`app/services/reviews.py`](app/services/reviews.py), [`app/services/exports.py`](app/services/exports.py), [review](app/main.py#L174) and [export](app/main.py#L218) routes | Review and audit workflow cases in [`tests/test_workflow.py`](tests/test_workflow.py#L331); approval-only export at [`test_only_fully_approved_bid_can_be_exported`](tests/test_workflow.py#L428) |
-| Serve a stored source document only when its content hash matches | Document route in [`app/main.py`](app/main.py#L235) | Exact-byte, mismatch, missing-file, and path-containment cases in [`tests/test_source_document_download.py`](tests/test_source_document_download.py#L48) |
+| Parse and import a source document; preserve source locations and avoid partial records | [`app/parsers.py`](app/parsers.py), [`app/services/imports.py`](app/services/imports.py), import route in [`app/routes/imports.py`](app/routes/imports.py) | [`tests/test_parsers.py`](tests/test_parsers.py), [idempotency](tests/test_workflow.py#L28), and [rollback cleanup](tests/test_workflow.py#L139) |
+| Correct or approve a line, retain audit history, reject stale edits, and gate CSV export | [`app/services/reviews.py`](app/services/reviews.py), [`app/services/exports.py`](app/services/exports.py), [review](app/routes/reviews.py) and [export](app/routes/exports.py) routes | Review and audit workflow cases in [`tests/test_workflow.py`](tests/test_workflow.py#L331); approval-only export at [`test_only_fully_approved_bid_can_be_exported`](tests/test_workflow.py#L428) |
+| Serve a stored source document only when its content hash matches | Document route in [`app/routes/documents.py`](app/routes/documents.py) | Exact-byte, mismatch, missing-file, and path-containment cases in [`tests/test_source_document_download.py`](tests/test_source_document_download.py#L48) |
+| Review-progress analytics and cross-bid reporting | [`app/services/analytics.py`](app/services/analytics.py), [`app/routes/dashboard.py`](app/routes/dashboard.py), [summary export](app/services/exports.py) | [`tests/test_dashboard.py`](tests/test_dashboard.py), [`tests/test_reporting.py`](tests/test_reporting.py) |
 | Change persisted tables, types, or audit immutability | [`app/models.py`](app/models.py), [`app/migrations/versions/`](app/migrations/versions/) | [`tests/test_schema.py`](tests/test_schema.py); CI also runs Alembic's schema-drift check |
 | Change the isolated database-and-file restore demonstration | [`scripts/backup_restore_demo.py`](scripts/backup_restore_demo.py), [`app/services/source_backup.py`](app/services/source_backup.py) | [`tests/test_backup_restore_demo.py`](tests/test_backup_restore_demo.py), then follow the [restore evidence guide](docs/backup-restore-evidence.md) for the real local run and current CI status |
 
-The PostgreSQL-backed workflow tests need the disposable test database described above. The restore guide distinguishes mocked failure-cleanup coverage from a real PostgreSQL restore run and marks the hosted restore run pending.
+The PostgreSQL-backed workflow tests need the disposable test database described above. The restore guide distinguishes mocked failure-cleanup coverage from a real PostgreSQL restore run and links the current hosted CI evidence.
 
 ## Demo limits
 
-This repository intentionally demonstrates a narrow and auditable ingestion path. It does not implement OCR, generalized construction takeoff, tenant accounts, authentication, real ERP/CRM integrations, cloud hosting, replication, or production recovery guarantees. PDF extraction supports only the documented text fixture layout.
+This repository intentionally demonstrates a narrow and auditable ingestion path. It does not implement OCR, generalized construction takeoff, tenant accounts, role-based permissions, real ERP/CRM integrations, cloud hosting, replication, or production recovery guarantees. PDF extraction supports only the documented text fixture layout.

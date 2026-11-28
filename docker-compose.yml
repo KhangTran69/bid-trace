@@ -24,6 +24,8 @@ services:
     environment:
       DATABASE_URL: postgresql+psycopg://bidtrace:${BIDTRACE_POSTGRES_PASSWORD:-bidtrace-local-demo}@db:5432/bidtrace
       UPLOAD_DIR: /app/data/uploads
+      SESSION_SECRET: ${SESSION_SECRET:-bidtrace-local-demo-secret}
+      AUTH_ENABLED: ${AUTH_ENABLED:-1}
     ports:
       - "127.0.0.1:8000:8000"
     volumes:

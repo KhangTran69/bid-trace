@@ -11,7 +11,9 @@ from app.config import Settings
 def database_url() -> str:
     url = os.environ.get("TEST_DATABASE_URL") or os.environ.get("DATABASE_URL")
     if not url:
-        pytest.exit("Set TEST_DATABASE_URL to a disposable PostgreSQL database")
+        pytest.skip(
+            "PostgreSQL-backed tests skipped: set TEST_DATABASE_URL to a disposable database"
+        )
     return url
 
 
@@ -36,7 +38,13 @@ def clean_database(engine):
 def client(database_url: str, tmp_path):
     from app.main import create_app
 
-    app = create_app(Settings(database_url=database_url, upload_dir=tmp_path / "uploads"))
+    app = create_app(
+        Settings(
+            database_url=database_url,
+            upload_dir=tmp_path / "uploads",
+            auth_enabled=False,
+        )
+    )
     with TestClient(app) as test_client:
         yield test_client
 

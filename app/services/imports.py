@@ -1,3 +1,4 @@
+import logging
 import os
 import re
 from hashlib import sha256
@@ -9,6 +10,8 @@ from sqlalchemy.orm import Session
 
 from app.models import AuditEvent, Bid, BidLineItem, SourceDocument
 from app.parsers import parse_document
+
+logger = logging.getLogger(__name__)
 
 
 def _safe_filename(filename: str) -> str:
@@ -62,6 +65,7 @@ def import_bid(
     filename: str,
     content: bytes,
     storage_dir: Path,
+    actor: str = "demo-reviewer",
 ) -> Bid:
     if not project_name.strip() or len(project_name.strip()) > 160:
         raise ValueError("Project name must contain 1 to 160 characters.")
@@ -119,12 +123,13 @@ def import_bid(
                         bid_id=bid.id,
                         entity_type="bid",
                         entity_id=bid.id,
-                        actor="demo-reviewer",
+                        actor=actor,
                         action="bid_imported",
                         before_values=None,
                         after_values={"sha256": digest, "item_count": len(items)},
                     )
                 )
+        logger.info("Imported bid %s with %d line items.", bid.id, len(parsed.items))
         return bid
     except Exception:
         session.rollback()
@@ -135,9 +140,21 @@ def import_bid(
                 # SQLite has no cross-process lock in this path, so retain staged files.
                 if winning_bid is None and created_file and dialect == "postgresql":
                     (storage_dir / storage_key).unlink(missing_ok=True)
+                    logger.warning(
+                        "Removed staged source file %s after a failed import.", storage_key
+                    )
             if winning_bid is not None:
+                logger.info(
+                    "A concurrent import already committed digest %.12s; returning bid %s.",
+                    digest,
+                    winning_bid.id,
+                )
                 return winning_bid
         except Exception:
             session.rollback()
+            logger.warning(
+                "Could not verify staged-file ownership for digest %.12s; file kept.",
+                digest,
+            )
             # Keep a staged file if cleanup could not safely verify its owner.
         raise

@@ -26,6 +26,6 @@ The script drops its uniquely named scratch database in a `finally` block and us
 
 ## CI status and limits
 
-**Restore-demo CI evidence: pending.** The workflow defines a separate PostgreSQL 16 job with a dedicated `bidtrace_restore_source` database, temporary upload and scratch directories, and success, missing-file, and corrupted-file scenarios. Its synthetic seeder uses a `.csv` key supported by the restore code. No run has been observed, so no CI pass is claimed here.
+**Restore-demo CI evidence: passing.** The workflow defines a separate PostgreSQL 16 job with a dedicated `bidtrace_restore_source` database, temporary upload and scratch directories, and success, missing-file, and corrupted-file scenarios. Its synthetic seeder uses a `.csv` key supported by the restore code. The hosted `restore-demo` job runs on every push and pull request and passed on the latest observed run (2026-11-26, run 45754710088); check the [Actions tab](https://github.com/KhangTran69/bid-trace/actions) for current status.
 
 This is a local synthetic integrity demonstration. It does not prove production recovery, backup retention, point-in-time recovery, or an RPO/RTO guarantee. Its consistency assumption is that committed source files remain immutable and are stored before their database rows are committed.

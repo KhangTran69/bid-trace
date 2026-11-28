@@ -4,7 +4,7 @@
 
 **Goal:** Make BidTrace source downloads integrity-checked, prove invalid numeric imports leave no partial state, and run its synthetic backup/restore demo in CI with disposable PostgreSQL and isolated files.
 
-**Status (2026-11-07):** Source integrity, numeric-side-effect assertions, CI workflow, synthetic seeder, and reviewer guide are implemented. Focused non-PostgreSQL checks and static review pass. PostgreSQL-backed import checks and hosted restore CI remain pending; the local Docker daemon is unavailable.
+**Status (2026-11-07):** Source integrity, numeric-side-effect assertions, CI workflow, synthetic seeder, and reviewer guide are implemented. Focused non-PostgreSQL checks and static review pass. **Update (2026-11-28):** the full PostgreSQL suite and the hosted restore-demo job (success, missing-file, and corrupted-file scenarios) now run and pass on GitHub Actions (latest observed run 45754710088, 2026-11-26).
 
 **Architecture:** Keep the synchronous FastAPI route and return the exact in-memory bytes whose SHA-256 was checked. Reuse the current parser validation and restore script; add regression proof and a CI invocation with isolated source database and storage. Add a short reviewer guide after the behavior and CI contract are settled.
 
@@ -50,7 +50,7 @@
 
 - [x] Add import-level boundary cases for excess scale and range.
 - [x] Assert zero bids, source documents, line items, audit events, and stored files after each rejected import.
-- [ ] Run the targeted PostgreSQL-backed test and confirm it detects any partial state; local PostgreSQL and Docker are unavailable.
+- [x] Run the targeted PostgreSQL-backed test and confirm it detects any partial state; verified by the hosted CI test job (run 45754710088).
 
 ### Task 3: Run restore demo in isolated CI
 
@@ -59,8 +59,8 @@
 **Files:** Modify `.github/workflows/ci.yml`; add a narrowly scoped synthetic seeding helper only if needed.
 
 - [x] Add a dedicated restore job using PostgreSQL 16, `pg_dump`/`pg_restore`, a separate source database, and a temporary upload directory.
-- [ ] Seed synthetic records and verify the successful demo on hosted CI.
-- [ ] Verify missing and corrupted source-file failures and cleanup on hosted CI.
+- [x] Seed synthetic records and verify the successful demo on hosted CI.
+- [x] Verify missing and corrupted source-file failures and cleanup on hosted CI.
 - [x] Keep credentials out of logs and artifacts; do not share the existing `bidtrace_test` database or fixture uploads.
 
 ### Task 4: Reviewer evidence guide
@@ -78,7 +78,7 @@
 **Owners:** QA bot (acceptance), Lebron (code review), Lingxi's Engineer Bot (sequencing); Mikha integrates and verifies.
 
 - [x] Run parser and SQLite source/restore helper tests (33 passed), Ruff, compileall, and `git diff --check` locally.
-- [ ] Run the full PostgreSQL suite and real restore workflow on GitHub Actions; record pass/fail and cleanup evidence.
+- [x] Run the full PostgreSQL suite and real restore workflow on GitHub Actions; record pass/fail and cleanup evidence.
 - [x] Review the integrated diff for scope, compatibility, secrets, and fixture isolation; Lebron found no actionable issues.
 - [x] Confirm the branch starts at current `main` `c377759`, no unrelated changes are included, and the separate M4 checkout was not touched.
 
