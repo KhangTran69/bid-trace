@@ -20,7 +20,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["httpx2>=2.16.0,<3", "pytest>=8.3,<9", "ruff>=0.11,<1"]
+dev = ["httpx2>=2.16.0,<3", "pytest>=8.3,<9", "pytest-cov>=6,<8", "ruff>=0.11,<1"]
 
 [tool.setuptools.packages.find]
 include = ["app*"]
@@ -31,6 +31,10 @@ app = ["templates/*.html", "static/*.css", "migrations/*.mako"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-q"
+
+[tool.coverage.run]
+source = ["app"]
+omit = ["app/migrations/*"]
 
 [tool.ruff]
 line-length = 100

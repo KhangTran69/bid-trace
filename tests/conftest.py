@@ -11,7 +11,9 @@ from app.config import Settings
 def database_url() -> str:
     url = os.environ.get("TEST_DATABASE_URL") or os.environ.get("DATABASE_URL")
     if not url:
-        pytest.exit("Set TEST_DATABASE_URL to a disposable PostgreSQL database")
+        pytest.skip(
+            "PostgreSQL-backed tests skipped: set TEST_DATABASE_URL to a disposable database"
+        )
     return url
 
 

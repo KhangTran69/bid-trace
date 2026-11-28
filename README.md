@@ -80,7 +80,7 @@ DATABASE_URL='postgresql+psycopg://bidtrace:bidtrace-local-demo@127.0.0.1:55439/
 uv run ruff check .
 ```
 
-CI runs the migration, schema-drift check, Ruff, and the same PostgreSQL-backed tests on Python 3.12.
+CI installs the locked dependencies with uv, runs the migration, schema-drift check, Ruff, and the same PostgreSQL-backed tests with a coverage summary on Python 3.12 and 3.13.
 
 ## Change-area map
 

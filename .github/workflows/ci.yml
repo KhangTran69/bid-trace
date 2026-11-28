@@ -7,6 +7,10 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.12", "3.13"]
     services:
       postgres:
         image: postgres:16
@@ -22,26 +26,28 @@ jobs:
           --health-timeout 5s
           --health-retries 10
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Install uv
+        uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6
         with:
-          python-version: "3.12"
-      - name: Install project and development tools
-        run: python -m pip install --upgrade pip && pip install -e '.[dev]'
+          python-version: ${{ matrix.python-version }}
+          enable-cache: true
+      - name: Install locked dependencies
+        run: uv sync --locked --extra dev
       - name: Apply database migrations
         env:
           DATABASE_URL: postgresql+psycopg://bidtrace:bidtrace-ci@127.0.0.1:5432/bidtrace_test
-        run: alembic upgrade head
+        run: uv run alembic upgrade head
       - name: Lint
-        run: ruff check .
+        run: uv run ruff check .
       - name: Verify migrations match models
         env:
           DATABASE_URL: postgresql+psycopg://bidtrace:bidtrace-ci@127.0.0.1:5432/bidtrace_test
-        run: alembic check
+        run: uv run alembic check
       - name: Run PostgreSQL-backed tests
         env:
           TEST_DATABASE_URL: postgresql+psycopg://bidtrace:bidtrace-ci@127.0.0.1:5432/bidtrace_test
-        run: pytest
+        run: uv run pytest --cov=app --cov-report=term-missing
 
   restore-demo:
     runs-on: ubuntu-24.04
@@ -60,14 +66,16 @@ jobs:
           --health-timeout 5s
           --health-retries 10
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Install uv
+        uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6
         with:
           python-version: "3.12"
+          enable-cache: true
       - name: Install PostgreSQL 16 client tools
         run: sudo apt-get update && sudo apt-get install --yes postgresql-client-16
-      - name: Install project and development tools
-        run: python -m pip install --upgrade pip && pip install -e '.[dev]'
+      - name: Install locked dependencies
+        run: uv sync --locked --extra dev
       - name: Verify isolated backup and restore cases
         env:
           DATABASE_URL: postgresql+psycopg://bidtrace:bidtrace-ci@127.0.0.1:5432/bidtrace_restore_source
@@ -99,8 +107,8 @@ jobs:
           export UPLOAD_DIR="$run_root/source-uploads"
           export TMPDIR="$run_root/tmp"
 
-          alembic upgrade head
-          python scripts/seed_restore_demo.py
+          uv run alembic upgrade head
+          uv run python scripts/seed_restore_demo.py
 
           assert_cleanup() {
             local scratch_count backup_temp_count
@@ -118,7 +126,7 @@ jobs:
             fi
           }
 
-          python scripts/backup_restore_demo.py
+          uv run python scripts/backup_restore_demo.py
           assert_cleanup
 
           source_file="$(find "$UPLOAD_DIR" -type f -print -quit)"
@@ -126,7 +134,7 @@ jobs:
           fixture_key="$(basename "$source_file")"
           cp "$source_file" "$run_root/fixture.txt"
           rm "$source_file"
-          if python scripts/backup_restore_demo.py; then
+          if uv run python scripts/backup_restore_demo.py; then
             echo "Restore demo unexpectedly accepted a missing source file." >&2
             exit 1
           fi
@@ -135,7 +143,7 @@ jobs:
           source_file="$UPLOAD_DIR/$fixture_key"
           cp "$run_root/fixture.txt" "$source_file"
           printf 'corrupted synthetic fixture\n' > "$source_file"
-          if python scripts/backup_restore_demo.py; then
+          if uv run python scripts/backup_restore_demo.py; then
             echo "Restore demo unexpectedly accepted a corrupted source file." >&2
             exit 1
           fi
