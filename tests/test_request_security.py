@@ -19,6 +19,7 @@ def client(tmp_path):
         Settings(
             database_url=f"sqlite:///{database_path}",
             upload_dir=tmp_path / "uploads",
+            auth_enabled=False,
         )
     )
     engine = app.state.session_factory.kw["bind"]
@@ -119,6 +120,7 @@ def test_custom_allowed_origins_are_honored(tmp_path):
             database_url=f"sqlite:///{database_path}",
             upload_dir=tmp_path / "uploads",
             allowed_review_origins=("http://127.0.0.1:5555",),
+            auth_enabled=False,
         )
     )
     engine = app.state.session_factory.kw["bind"]

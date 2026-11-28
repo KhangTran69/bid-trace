@@ -9,9 +9,10 @@ Requirements: Docker Desktop with Compose, and a browser.
 ```sh
 cp .env.example .env
 docker compose up --build
+docker compose exec app python scripts/create_user.py reviewer
 ```
 
-Open <http://127.0.0.1:8000>. Try `fixtures/bid-demo.pdf`, `fixtures/bid-demo.csv`, or `fixtures/bid-demo.xlsx`. Enter a project and vendor, inspect the source excerpt for each item, save any correction, and approve each row. The CSV export becomes available after every row is approved.
+Open <http://127.0.0.1:8000> and sign in with the reviewer account you created. Try `fixtures/bid-demo.pdf`, `fixtures/bid-demo.csv`, or `fixtures/bid-demo.xlsx`. Enter a project and vendor, inspect the source excerpt for each item, save any correction, and approve each row. The CSV export becomes available after every row is approved. Set `AUTH_ENABLED=0` in `.env` to restore anonymous demo access.
 
 To stop the app and keep its local demo data:
 
@@ -40,9 +41,9 @@ Each source reference shows the PDF page, CSV row, or XLSX sheet and cell range 
 
 Import writes the source file and creates the bid, source document, items, and import audit record transactionally. PostgreSQL serializes imports by content hash, and failed-import cleanup rechecks the database under that lock before removing a newly staged file. Re-uploading identical bytes returns the existing bid. If an unsupported SQLite import fails, its staged file is retained because this code path has no cross-process SQLite lock. Review forms submit a row version; stale forms receive a conflict rather than overwriting a newer edit. The final item approval and bid status update commit together. CSV export checks approval in PostgreSQL and prefixes formula-leading text to prevent spreadsheet formula execution.
 
-The app has one local demo reviewer and no authentication. Compose binds the app and PostgreSQL ports to loopback. This is not a production security boundary or a backup policy.
+Sign-in is required by default: reviewer accounts are created with `scripts/create_user.py` (bcrypt-hashed passwords), sign-in state lives in a signed session cookie, and the signed-in username is recorded as the `audit_events` actor. With `AUTH_ENABLED=0` the app returns to the original single hardcoded `demo-reviewer`. Set a unique `SESSION_SECRET` for any deployment shared beyond one machine. Compose binds the app and PostgreSQL ports to loopback. This is not a production security boundary or a backup policy.
 
-State-changing browser submissions (bid imports and line-item reviews) reject requests marked cross-site by Fetch Metadata and requests whose `Origin` header is present but invalid, different, or outside the allowed origins. Allowed origins default to the loopback URLs of ports 8000 and 8001 and can be overridden with a comma-separated `REVIEW_ORIGINS` environment variable. Non-browser clients that omit both headers remain usable. Responses also carry `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`, and a `Content-Security-Policy` that blocks inline scripts. This check limits cross-site browser submissions; it does not add authentication or make the demo suitable for deployment on an untrusted network.
+State-changing browser submissions (sign-ins, bid imports, and line-item reviews) reject requests marked cross-site by Fetch Metadata and requests whose `Origin` header is present but invalid, different, or outside the allowed origins. Allowed origins default to the loopback URLs of ports 8000 and 8001 and can be overridden with a comma-separated `REVIEW_ORIGINS` environment variable. Non-browser clients that omit both headers remain usable. Responses also carry `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`, and a `Content-Security-Policy` that blocks inline scripts. This check limits cross-site browser submissions; it does not make the demo suitable for deployment on an untrusted network.
 
 ## Database checks
 
@@ -96,4 +97,4 @@ The PostgreSQL-backed workflow tests need the disposable test database described
 
 ## Demo limits
 
-This repository intentionally demonstrates a narrow and auditable ingestion path. It does not implement OCR, generalized construction takeoff, tenant accounts, authentication, real ERP/CRM integrations, cloud hosting, replication, or production recovery guarantees. PDF extraction supports only the documented text fixture layout.
+This repository intentionally demonstrates a narrow and auditable ingestion path. It does not implement OCR, generalized construction takeoff, tenant accounts, role-based permissions, real ERP/CRM integrations, cloud hosting, replication, or production recovery guarantees. PDF extraction supports only the documented text fixture layout.

@@ -6,10 +6,11 @@ from pathlib import Path
 
 from fastapi import FastAPI, Request
 from fastapi.staticfiles import StaticFiles
+from starlette.middleware.sessions import SessionMiddleware
 
 from app.config import Settings
 from app.db import make_engine, make_session_factory
-from app.routes import bids, documents, exports, imports, reviews
+from app.routes import auth, bids, documents, exports, imports, reviews
 from app.security import apply_security_headers, origin_tuple
 
 logger = logging.getLogger("bidtrace")
@@ -43,6 +44,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         StaticFiles(directory=str(Path(__file__).parent / "static")),
         name="static",
     )
+    app.add_middleware(
+        SessionMiddleware,
+        secret_key=resolved_settings.session_secret,
+        same_site="lax",
+    )
 
     @app.middleware("http")
     async def add_security_headers(request: Request, call_next):
@@ -50,6 +56,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         apply_security_headers(response)
         return response
 
+    app.include_router(auth.router)
     app.include_router(bids.router)
     app.include_router(imports.router)
     app.include_router(reviews.router)

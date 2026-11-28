@@ -76,3 +76,7 @@ button:hover, .button:hover { background: var(--accent-dark); }
   .section-heading, .item-heading { align-items: flex-start; }
   .bid-list li { align-items: flex-start; }
 }
+.auth-nav { display: flex; align-items: center; gap: 10px; margin-left: auto; }
+.user-name { color: #31443a; font-weight: 650; font-size: 14px; }
+.link-button { min-height: 34px; padding: 5px 12px; background: white; color: var(--accent-dark); border: 1px solid var(--line); font-size: 14px; }
+.link-button:hover { background: var(--accent-dark); color: white; }

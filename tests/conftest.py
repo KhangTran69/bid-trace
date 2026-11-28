@@ -38,7 +38,13 @@ def clean_database(engine):
 def client(database_url: str, tmp_path):
     from app.main import create_app
 
-    app = create_app(Settings(database_url=database_url, upload_dir=tmp_path / "uploads"))
+    app = create_app(
+        Settings(
+            database_url=database_url,
+            upload_dir=tmp_path / "uploads",
+            auth_enabled=False,
+        )
+    )
     with TestClient(app) as test_client:
         yield test_client
 

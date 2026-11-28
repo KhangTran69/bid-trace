@@ -15,7 +15,13 @@ from app.models import Bid, SourceDocument
 def client(tmp_path):
     database_path = tmp_path / "documents.sqlite"
     upload_dir = tmp_path / "uploads"
-    app = create_app(Settings(database_url=f"sqlite:///{database_path}", upload_dir=upload_dir))
+    app = create_app(
+        Settings(
+            database_url=f"sqlite:///{database_path}",
+            upload_dir=upload_dir,
+            auth_enabled=False,
+        )
+    )
     engine = app.state.session_factory.kw["bind"]
     Base.metadata.create_all(engine)
     with TestClient(app) as test_client:

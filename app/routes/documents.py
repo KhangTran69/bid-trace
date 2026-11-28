@@ -3,9 +3,10 @@
 import logging
 from hashlib import sha256
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import Response
 
+from app.auth import require_user
 from app.config import MAX_UPLOAD_BYTES
 from app.models import SourceDocument
 from app.routes.deps import SessionDep
@@ -15,7 +16,7 @@ logger = logging.getLogger("bidtrace")
 router = APIRouter()
 
 
-@router.get("/documents/{document_id}")
+@router.get("/documents/{document_id}", dependencies=[Depends(require_user)])
 def get_document(request: Request, document_id: int, session: SessionDep):
     document = session.get(SourceDocument, document_id)
     if document is None:

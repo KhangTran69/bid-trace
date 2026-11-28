@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% block title %}BidTrace · Sign in{% endblock %}
+{% block content %}
+  <section class="panel" aria-labelledby="login-title">
+    <h2 id="login-title">Sign in</h2>
+    {% if error %}<div class="alert" role="alert">{{ error }}</div>{% endif %}
+    <form class="upload-form" action="/login" method="post">
+      <label>Username <input name="username" required autocomplete="username"></label>
+      <label>Password <input name="password" type="password" required autocomplete="current-password"></label>
+      <button type="submit">Sign in</button>
+      <p class="hint">Create a reviewer account with <code>python scripts/create_user.py &lt;username&gt;</code>.</p>
+    </form>
+  </section>
+{% endblock %}

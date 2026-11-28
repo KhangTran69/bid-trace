@@ -1,8 +1,9 @@
 """Approved CSV export."""
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import Response
 
+from app.auth import require_user
 from app.routes.deps import SessionDep
 from app.services.errors import Conflict, NotFound
 from app.services.exports import export_bid_csv
@@ -10,7 +11,7 @@ from app.services.exports import export_bid_csv
 router = APIRouter()
 
 
-@router.get("/bids/{bid_id}/export.csv")
+@router.get("/bids/{bid_id}/export.csv", dependencies=[Depends(require_user)])
 def download_export(bid_id: int, session: SessionDep):
     try:
         csv_content = export_bid_csv(session, bid_id)

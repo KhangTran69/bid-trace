@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
 
+from app.auth import UserDep, actor_for
 from app.models import BidLineItem
 from app.routes.bids import render_bid
 from app.routes.deps import SessionDep
@@ -34,6 +35,7 @@ def save_review(
     unit: Annotated[str, Form()],
     unit_price: Annotated[str, Form()],
     session: SessionDep,
+    user: UserDep,
 ):
     try:
         item = review_line_item(
@@ -47,6 +49,7 @@ def save_review(
                 "unit_price": unit_price,
             },
             action=action,
+            actor=actor_for(user),
         )
     except NotFound as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
@@ -56,6 +59,7 @@ def save_review(
             request,
             session,
             _item_bid_id_or_404(session, item_id, exc),
+            user=user,
             error=str(exc),
             status_code=409,
         )
@@ -65,6 +69,7 @@ def save_review(
             request,
             session,
             _item_bid_id_or_404(session, item_id, exc),
+            user=user,
             error=str(exc),
             status_code=422,
         )

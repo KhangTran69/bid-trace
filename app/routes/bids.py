@@ -5,7 +5,8 @@ from fastapi.responses import HTMLResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
-from app.models import Bid
+from app.auth import UserDep
+from app.models import Bid, User
 from app.routes.deps import SessionDep, list_bids_desc
 from app.templating import TEMPLATES
 
@@ -17,6 +18,7 @@ def render_bid(
     session: Session,
     bid_id: int,
     *,
+    user: User | None = None,
     error: str | None = None,
     status_code: int = 200,
 ):
@@ -33,6 +35,7 @@ def render_bid(
         context={
             "bid": bid,
             "items": sorted(bid.line_items, key=lambda item: item.id),
+            "user": user,
             "error": error,
         },
         status_code=status_code,
@@ -40,14 +43,14 @@ def render_bid(
 
 
 @router.get("/", response_class=HTMLResponse)
-def home(request: Request, session: SessionDep):
+def home(request: Request, session: SessionDep, user: UserDep):
     return TEMPLATES.TemplateResponse(
         request=request,
         name="index.html",
-        context={"bids": list_bids_desc(session)},
+        context={"bids": list_bids_desc(session), "user": user},
     )
 
 
 @router.get("/bids/{bid_id}", response_class=HTMLResponse)
-def bid_detail(request: Request, bid_id: int, session: SessionDep):
-    return render_bid(request, session, bid_id)
+def bid_detail(request: Request, bid_id: int, session: SessionDep, user: UserDep):
+    return render_bid(request, session, bid_id, user=user)

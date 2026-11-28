@@ -5,6 +5,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, File, Form, Request, UploadFile
 from fastapi.responses import RedirectResponse
 
+from app.auth import UserDep, actor_for
 from app.config import MAX_UPLOAD_BYTES
 from app.routes.deps import SessionDep, list_bids_desc
 from app.security import enforce_same_origin
@@ -21,6 +22,7 @@ def create_import(
     vendor_name: Annotated[str, Form()],
     file: Annotated[UploadFile, File()],
     session: SessionDep,
+    user: UserDep,
 ):
     settings = request.app.state.settings
     content = file.file.read(MAX_UPLOAD_BYTES + 1)
@@ -30,6 +32,7 @@ def create_import(
             name="index.html",
             context={
                 "bids": list_bids_desc(session),
+                "user": user,
                 "error": "Uploads must be 10 MiB or smaller.",
             },
             status_code=400,
@@ -42,13 +45,14 @@ def create_import(
             filename=file.filename or "uploaded-bid",
             content=content,
             storage_dir=settings.upload_dir,
+            actor=actor_for(user),
         )
     except ValueError as exc:
         session.rollback()
         return TEMPLATES.TemplateResponse(
             request=request,
             name="index.html",
-            context={"bids": list_bids_desc(session), "error": str(exc)},
+            context={"bids": list_bids_desc(session), "user": user, "error": str(exc)},
             status_code=400,
         )
     return RedirectResponse(f"/bids/{bid.id}", status_code=303)

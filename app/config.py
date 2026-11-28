@@ -33,3 +33,10 @@ class Settings:
             if origin.strip()
         )
     )
+    session_secret: str = field(
+        default_factory=lambda: os.environ.get("SESSION_SECRET", "bidtrace-local-demo-secret")
+    )
+    auth_enabled: bool = field(
+        default_factory=lambda: os.environ.get("AUTH_ENABLED", "1").lower()
+        not in {"0", "false", "no", "off"}
+    )

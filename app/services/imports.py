@@ -65,6 +65,7 @@ def import_bid(
     filename: str,
     content: bytes,
     storage_dir: Path,
+    actor: str = "demo-reviewer",
 ) -> Bid:
     if not project_name.strip() or len(project_name.strip()) > 160:
         raise ValueError("Project name must contain 1 to 160 characters.")
@@ -122,7 +123,7 @@ def import_bid(
                         bid_id=bid.id,
                         entity_type="bid",
                         entity_id=bid.id,
-                        actor="demo-reviewer",
+                        actor=actor,
                         action="bid_imported",
                         before_values=None,
                         after_values={"sha256": digest, "item_count": len(items)},
