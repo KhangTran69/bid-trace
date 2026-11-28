@@ -4,11 +4,16 @@ __pycache__/
 .pytest_cache/
 .ruff_cache/
 .coverage
+.coverage.*
+htmlcov/
 .env
 .env.*
 !.env.example
-data/uploads/
+data/
 .local/
 dist/
 build/
 *.egg-info/
+*.sqlite
+.DS_Store
+.zcode/
