@@ -26,7 +26,7 @@ dev = ["httpx2>=2.16.0,<3", "pytest>=8.3,<9", "pytest-cov>=6,<8", "ruff>=0.11,<1
 include = ["app*"]
 
 [tool.setuptools.package-data]
-app = ["templates/*.html", "static/*.css", "migrations/*.mako"]
+app = ["templates/*.html", "static/*", "migrations/*.mako"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
